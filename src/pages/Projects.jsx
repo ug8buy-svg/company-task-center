@@ -184,17 +184,17 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
       )}
 
       {/* 新增里程碑 */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
         <input
           value={milestoneInput}
           onChange={e => setMilestoneInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAddMilestone()}
           placeholder="新增里程碑..."
           style={{
-            flex: 1, padding: '6px 10px', fontSize: 13,
+            width: '100%', padding: '6px 10px', fontSize: 13,
             border: '1px solid var(--border)', borderRadius: 8,
             background: 'var(--bg)', color: 'var(--text-primary)',
-            outline: 'none', fontFamily: 'inherit',
+            outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
           }}
           onFocus={e => e.target.style.borderColor = 'var(--blue)'}
           onBlur={e => e.target.style.borderColor = 'var(--border)'}
@@ -204,7 +204,7 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
           style={{
             background: 'var(--blue)', color: '#fff', border: 'none',
             borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap',
+            cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-end',
           }}
         >新增</button>
       </div>
