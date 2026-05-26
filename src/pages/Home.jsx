@@ -1,29 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-// ── 假資料：行事曆事件點（真實資料之後再串接）──
-const FAKE_EVENTS = {
-  '2026-05-05': ['blue'],
-  '2026-05-08': ['orange'],
-  '2026-05-12': ['blue', 'green'],
-  '2026-05-15': ['orange'],
-  '2026-05-20': ['red'],
-  '2026-05-22': ['blue'],
-  '2026-05-28': ['orange', 'green'],
-  '2026-06-03': ['blue'],
-  '2026-06-10': ['red'],
-  '2026-06-15': ['green', 'orange'],
-  '2026-06-22': ['blue'],
-}
+import { supabase } from '../lib/supabase'
 
 const DOT_COLOR = {
   blue:   'var(--blue)',
-  green:  'var(--green)',
   orange: 'var(--orange)',
+  green:  'var(--green)',
   red:    'var(--red)',
 }
+const DOT_ORDER = ['blue', 'orange', 'green', 'red']
 
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+const WEEKDAYS   = ['日', '一', '二', '三', '四', '五', '六']
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 const DAY_NAMES   = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六']
 
@@ -36,18 +23,102 @@ const MODULES = [
   { icon: '🔔', label: '展覽通知設定', desc: 'LINE 推播提醒設定',   path: null,         pin: false, soon: true },
 ]
 
+// 從時間戳取出瀏覽器本地日期字串（解決 UTC 與台灣時區差 8 小時的問題）
+function localDateStr(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+async function fetchMonthEvents(yr, mo) {
+  const pad = n => String(n).padStart(2, '0')
+  // DATE 欄位用日期字串比較
+  const dateStart = `${yr}-${pad(mo + 1)}-01`
+  const dateEnd   = mo === 11 ? `${yr + 1}-01-01` : `${yr}-${pad(mo + 2)}-01`
+  // TIMESTAMPTZ 欄位用本地午夜的 ISO 時間戳（含時區修正）
+  const tsStart = new Date(yr, mo, 1).toISOString()
+  const tsEnd   = new Date(yr, mo + 1, 1).toISOString()
+
+  const [
+    { data: mData  },
+    { data: tData  },
+    { data: msData },
+    { data: eData  },
+  ] = await Promise.all([
+    supabase.from('meetings').select('meeting_date, title')
+      .gte('meeting_date', dateStart).lt('meeting_date', dateEnd),
+    supabase.from('boss_todos').select('created_at')
+      .eq('is_done', false).gte('created_at', tsStart).lt('created_at', tsEnd),
+    supabase.from('milestones').select('done_at')
+      .eq('is_done', true).not('done_at', 'is', null)
+      .gte('done_at', tsStart).lt('done_at', tsEnd),
+    supabase.from('exhibitions').select('event_date, name')
+      .gte('event_date', dateStart).lt('event_date', dateEnd),
+  ])
+
+  const dots = {}
+  const summ = {}
+
+  const addDot = (ds, color) => {
+    if (!dots[ds]) dots[ds] = []
+    if (!dots[ds].includes(color)) dots[ds].push(color)
+  }
+  const ensureSum = (ds) => {
+    if (!summ[ds]) summ[ds] = { meetings: [], todos: 0, milestones: 0, exhibitions: [] }
+  }
+
+  for (const m of (mData  || [])) {
+    addDot(m.meeting_date, 'blue')
+    ensureSum(m.meeting_date)
+    summ[m.meeting_date].meetings.push(m.title)
+  }
+  for (const t of (tData  || [])) {
+    const ds = localDateStr(t.created_at)
+    addDot(ds, 'orange')
+    ensureSum(ds)
+    summ[ds].todos++
+  }
+  for (const m of (msData || [])) {
+    const ds = localDateStr(m.done_at)
+    addDot(ds, 'green')
+    ensureSum(ds)
+    summ[ds].milestones++
+  }
+  for (const e of (eData  || [])) {
+    addDot(e.event_date, 'red')
+    ensureSum(e.event_date)
+    summ[e.event_date].exhibitions.push(e.name)
+  }
+
+  for (const ds in dots) {
+    dots[ds].sort((a, b) => DOT_ORDER.indexOf(a) - DOT_ORDER.indexOf(b))
+  }
+
+  return { dots, summ }
+}
+
 // ── 行事曆元件 ──
 function Calendar({ today }) {
-  const [year, setYear]   = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth())
+  const [year,     setYear]     = useState(today.getFullYear())
+  const [month,    setMonth]    = useState(today.getMonth())
   const [slideKey, setSlideKey] = useState(0)
   const [slideDir, setSlideDir] = useState('')
+  const [dots,     setDots]     = useState({})
+  const [summ,     setSumm]     = useState({})
+  const [selected, setSelected] = useState(null)
+
+  useEffect(() => {
+    fetchMonthEvents(year, month).then(({ dots, summ }) => {
+      setDots(dots)
+      setSumm(summ)
+      setSelected(null)
+    })
+  }, [year, month])
 
   function goMonth(dir) {
     setSlideDir(dir > 0 ? 'cal-slide-right' : 'cal-slide-left')
     setSlideKey(k => k + 1)
     const next = month + dir
-    if (next > 11) { setMonth(0);  setYear(y => y + 1) }
+    if (next > 11)  { setMonth(0);  setYear(y => y + 1) }
     else if (next < 0) { setMonth(11); setYear(y => y - 1) }
     else setMonth(next)
   }
@@ -60,64 +131,102 @@ function Calendar({ today }) {
   ]
   while (cells.length % 7 !== 0) cells.push(null)
 
+  const selData = selected ? summ[selected] : null
+
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 16, border: '1px solid var(--border)', padding: '16px 12px', width: '100%', maxWidth: 480 }}>
-      {/* 月份導覽 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <button onClick={() => goMonth(-1)} style={navBtn}>‹</button>
-        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {year}年 {MONTH_NAMES[month]}
-        </span>
-        <button onClick={() => goMonth(1)} style={navBtn}>›</button>
+    <>
+      <div style={{ background: 'var(--card)', borderRadius: 16, border: '1px solid var(--border)', padding: '16px 12px', width: '100%', maxWidth: 480 }}>
+        {/* 月份導覽 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <button onClick={() => goMonth(-1)} style={navBtn}>‹</button>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {year}年 {MONTH_NAMES[month]}
+          </span>
+          <button onClick={() => goMonth(1)} style={navBtn}>›</button>
+        </div>
+
+        {/* 星期標頭 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
+          {WEEKDAYS.map((d, i) => (
+            <div key={d} style={{
+              textAlign: 'center', fontSize: 12, fontWeight: 500,
+              color: i === 0 ? 'var(--red)' : i === 6 ? 'var(--blue)' : 'var(--text-secondary)',
+              padding: '2px 0',
+            }}>{d}</div>
+          ))}
+        </div>
+
+        {/* 日期格子 */}
+        <div key={slideKey} className={slideDir}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+          {cells.map((day, i) => {
+            if (!day) return <div key={`e${i}`} style={{ height: 46 }} />
+            const mm       = String(month + 1).padStart(2, '0')
+            const dd       = String(day).padStart(2, '0')
+            const key      = `${year}-${mm}-${dd}`
+            const isToday  = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
+            const isSel    = selected === key
+            const isSun    = (i % 7) === 0
+            const isSat    = (i % 7) === 6
+            const dayDots  = dots[key] || []
+
+            return (
+              <div
+                key={day}
+                onClick={() => setSelected(isSel ? null : key)}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 46, justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <div style={{
+                  width: 30, height: 30,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '50%', fontSize: 13,
+                  fontWeight: isToday || isSel ? 700 : 400,
+                  background: isToday ? 'var(--blue)' : isSel ? 'var(--border)' : 'transparent',
+                  color: isToday ? '#fff' : isSun ? 'var(--red)' : isSat ? 'var(--blue)' : 'var(--text-primary)',
+                }}>{day}</div>
+                {dayDots.length > 0 && (
+                  <div style={{ display: 'flex', gap: 3, marginTop: 2 }}>
+                    {dayDots.map((c, di) => (
+                      <span key={di} style={{ width: 5, height: 5, borderRadius: '50%', background: DOT_COLOR[c], display: 'block' }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* 星期標頭 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
-        {WEEKDAYS.map((d, i) => (
-          <div key={d} style={{
-            textAlign: 'center', fontSize: 12, fontWeight: 500,
-            color: i === 0 ? 'var(--red)' : i === 6 ? 'var(--blue)' : 'var(--text-secondary)',
-            padding: '2px 0',
-          }}>{d}</div>
-        ))}
-      </div>
-
-      {/* 日期格子 */}
-      <div key={slideKey} className={slideDir}
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {cells.map((day, i) => {
-          if (!day) return <div key={`e${i}`} style={{ height: 46 }} />
-          const mm  = String(month + 1).padStart(2, '0')
-          const dd  = String(day).padStart(2, '0')
-          const key = `${year}-${mm}-${dd}`
-          const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
-          const isSun   = (i % 7) === 0
-          const isSat   = (i % 7) === 6
-          const dots    = FAKE_EVENTS[key] || []
-
-          return (
-            <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 46, justifyContent: 'center' }}>
-              <div style={{
-                width: 30, height: 30,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '50%',
-                fontSize: 13,
-                fontWeight: isToday ? 700 : 400,
-                background: isToday ? 'var(--blue)' : 'transparent',
-                color: isToday ? '#fff' : isSun ? 'var(--red)' : isSat ? 'var(--blue)' : 'var(--text-primary)',
-              }}>{day}</div>
-              {dots.length > 0 && (
-                <div style={{ display: 'flex', gap: 3, marginTop: 2 }}>
-                  {dots.map((c, di) => (
-                    <span key={di} style={{ width: 5, height: 5, borderRadius: '50%', background: DOT_COLOR[c], display: 'block' }} />
-                  ))}
-                </div>
+      {/* 事件摘要卡片 */}
+      {selected && (
+        <div style={{
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 14, padding: '14px 16px', width: '100%', maxWidth: 480,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: selData ? 10 : 0 }}>
+            {selected.replace(/-/g, '/')}
+          </div>
+          {!selData ? (
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>這天沒有事件</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {selData.meetings.map((title, idx) => (
+                <div key={idx} style={{ fontSize: 14, color: 'var(--text-primary)' }}>📅 {title}</div>
+              ))}
+              {selData.todos > 0 && (
+                <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>📋 {selData.todos} 筆待辦未完成</div>
               )}
+              {selData.milestones > 0 && (
+                <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>✅ {selData.milestones} 個里程碑完成</div>
+              )}
+              {selData.exhibitions.map((name, idx) => (
+                <div key={idx} style={{ fontSize: 14, color: 'var(--text-primary)' }}>🎪 {name}</div>
+              ))}
             </div>
-          )
-        })}
-      </div>
-    </div>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
