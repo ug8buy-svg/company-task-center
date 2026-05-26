@@ -6,24 +6,22 @@ const DOT_COLOR = {
   blue:   'var(--blue)',
   orange: 'var(--orange)',
   green:  'var(--green)',
-  red:    'var(--red)',
 }
-const DOT_ORDER = ['blue', 'orange', 'green', 'red']
+const DOT_ORDER = ['blue', 'orange', 'green']
 
-const WEEKDAYS   = ['日', '一', '二', '三', '四', '五', '六']
+const WEEKDAYS    = ['日', '一', '二', '三', '四', '五', '六']
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 const DAY_NAMES   = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六']
 
 const MODULES = [
-  { icon: '📋', label: '劉姐待辦清單', desc: '需劉姐確認的事項',    path: '/todos',     pin: true  },
-  { icon: '📝', label: '劉姐專屬備注', desc: '僅限劉姐與管理者',    path: '/notes',     pin: true  },
-  { icon: '📊', label: '專案進度看板', desc: '三個專案的進度追蹤',  path: '/projects',  pin: true  },
-  { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist', pin: false },
-  { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',  pin: false },
-  { icon: '🔔', label: '展覽通知設定', desc: 'LINE 推播提醒設定',   path: null,         pin: false, soon: true },
+  { icon: '📋', label: '劉姐待辦清單', desc: '需劉姐確認的事項',    path: '/todos',         pin: true  },
+  { icon: '📝', label: '劉姐專屬備注', desc: '僅限劉姐與管理者',    path: '/notes',         pin: true  },
+  { icon: '📊', label: '專案進度看板', desc: '三個專案的進度追蹤',  path: '/projects',      pin: true  },
+  { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist',     pin: false },
+  { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',      pin: false },
+  { icon: '🔔', label: '展覽管理',    desc: '展覽日期與通知管理',   path: '/notifications', pin: true  },
 ]
 
-// 從時間戳取出瀏覽器本地日期字串（解決 UTC 與台灣時區差 8 小時的問題）
 function localDateStr(ts) {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -31,12 +29,12 @@ function localDateStr(ts) {
 
 async function fetchMonthEvents(yr, mo) {
   const pad = n => String(n).padStart(2, '0')
-  // DATE 欄位用日期字串比較
-  const dateStart = `${yr}-${pad(mo + 1)}-01`
-  const dateEnd   = mo === 11 ? `${yr + 1}-01-01` : `${yr}-${pad(mo + 2)}-01`
-  // TIMESTAMPTZ 欄位用本地午夜的 ISO 時間戳（含時區修正）
-  const tsStart = new Date(yr, mo, 1).toISOString()
-  const tsEnd   = new Date(yr, mo + 1, 1).toISOString()
+  const dateStart  = `${yr}-${pad(mo + 1)}-01`
+  const lastDayNum = new Date(yr, mo + 1, 0).getDate()
+  const lastDayStr = `${yr}-${pad(mo + 1)}-${pad(lastDayNum)}`
+  const dateEnd    = mo === 11 ? `${yr + 1}-01-01` : `${yr}-${pad(mo + 2)}-01`
+  const tsStart    = new Date(yr, mo, 1).toISOString()
+  const tsEnd      = new Date(yr, mo + 1, 1).toISOString()
 
   const [
     { data: mData  },
@@ -51,8 +49,7 @@ async function fetchMonthEvents(yr, mo) {
     supabase.from('milestones').select('done_at')
       .eq('is_done', true).not('done_at', 'is', null)
       .gte('done_at', tsStart).lt('done_at', tsEnd),
-    supabase.from('exhibitions').select('event_date, name')
-      .gte('event_date', dateStart).lt('event_date', dateEnd),
+    supabase.from('exhibitions').select('event_date, end_date, name'),
   ])
 
   const dots = {}
@@ -63,7 +60,7 @@ async function fetchMonthEvents(yr, mo) {
     if (!dots[ds].includes(color)) dots[ds].push(color)
   }
   const ensureSum = (ds) => {
-    if (!summ[ds]) summ[ds] = { meetings: [], todos: 0, milestones: 0, exhibitions: [] }
+    if (!summ[ds]) summ[ds] = { meetings: [], todos: 0, milestones: 0 }
   }
 
   for (const m of (mData  || [])) {
@@ -83,33 +80,38 @@ async function fetchMonthEvents(yr, mo) {
     ensureSum(ds)
     summ[ds].milestones++
   }
-  for (const e of (eData  || [])) {
-    addDot(e.event_date, 'red')
-    ensureSum(e.event_date)
-    summ[e.event_date].exhibitions.push(e.name)
-  }
 
   for (const ds in dots) {
     dots[ds].sort((a, b) => DOT_ORDER.indexOf(a) - DOT_ORDER.indexOf(b))
   }
 
-  return { dots, summ }
+  // 展覽：取全部資料，前端篩選與本月重疊的，支援跨月展覽
+  const exhibitionsList = (eData || [])
+    .filter(ex => {
+      const exEnd = ex.end_date || ex.event_date
+      return ex.event_date <= lastDayStr && exEnd >= dateStart
+    })
+    .map(ex => ({ name: ex.name, startDate: ex.event_date, endDate: ex.end_date || ex.event_date }))
+
+  return { dots, summ, exhibitionsList }
 }
 
 // ── 行事曆元件 ──
 function Calendar({ today }) {
-  const [year,     setYear]     = useState(today.getFullYear())
-  const [month,    setMonth]    = useState(today.getMonth())
-  const [slideKey, setSlideKey] = useState(0)
-  const [slideDir, setSlideDir] = useState('')
-  const [dots,     setDots]     = useState({})
-  const [summ,     setSumm]     = useState({})
-  const [selected, setSelected] = useState(null)
+  const [year,          setYear]          = useState(today.getFullYear())
+  const [month,         setMonth]         = useState(today.getMonth())
+  const [slideKey,      setSlideKey]      = useState(0)
+  const [slideDir,      setSlideDir]      = useState('')
+  const [dots,          setDots]          = useState({})
+  const [summ,          setSumm]          = useState({})
+  const [exhibitionsList, setExhibitionsList] = useState([])
+  const [selected,      setSelected]      = useState(null)
 
   useEffect(() => {
-    fetchMonthEvents(year, month).then(({ dots, summ }) => {
+    fetchMonthEvents(year, month).then(({ dots, summ, exhibitionsList }) => {
       setDots(dots)
       setSumm(summ)
+      setExhibitionsList(exhibitionsList)
       setSelected(null)
     })
   }, [year, month])
@@ -132,10 +134,15 @@ function Calendar({ today }) {
   while (cells.length % 7 !== 0) cells.push(null)
 
   const selData = selected ? summ[selected] : null
+  const selectedExhibitions = selected
+    ? exhibitionsList.filter(ex => selected >= ex.startDate && selected <= ex.endDate)
+    : []
+  const hasAnyEvent = selData || selectedExhibitions.length > 0
 
   return (
     <>
       <div style={{ background: 'var(--card)', borderRadius: 16, border: '1px solid var(--border)', padding: '16px 12px', width: '100%', maxWidth: 480 }}>
+
         {/* 月份導覽 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <button onClick={() => goMonth(-1)} style={navBtn}>‹</button>
@@ -160,30 +167,64 @@ function Calendar({ today }) {
         <div key={slideKey} className={slideDir}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
           {cells.map((day, i) => {
-            if (!day) return <div key={`e${i}`} style={{ height: 46 }} />
-            const mm       = String(month + 1).padStart(2, '0')
-            const dd       = String(day).padStart(2, '0')
-            const key      = `${year}-${mm}-${dd}`
-            const isToday  = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
-            const isSel    = selected === key
-            const isSun    = (i % 7) === 0
-            const isSat    = (i % 7) === 6
-            const dayDots  = dots[key] || []
+            if (!day) return <div key={`e${i}`} style={{ minHeight: 46 }} />
+
+            const mm  = String(month + 1).padStart(2, '0')
+            const dd  = String(day).padStart(2, '0')
+            const key = `${year}-${mm}-${dd}`
+
+            const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
+            const isSel   = selected === key
+            const isSun   = (i % 7) === 0
+            const isSat   = (i % 7) === 6
+            const dayDots = dots[key] || []
+
+            const dayExhibitions = exhibitionsList.map(ex => {
+              if (key < ex.startDate || key > ex.endDate) return null
+              const isStart = key === ex.startDate
+              const isEnd   = key === ex.endDate
+              const position = isStart && isEnd ? 'single' : isStart ? 'start' : isEnd ? 'end' : 'middle'
+              return { name: ex.name, position }
+            }).filter(Boolean)
 
             return (
               <div
                 key={day}
                 onClick={() => setSelected(isSel ? null : key)}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 46, justifyContent: 'center', cursor: 'pointer' }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 46, cursor: 'pointer', paddingBottom: 3 }}
               >
+                {/* 日期數字 */}
                 <div style={{
-                  width: 30, height: 30,
+                  width: 30, height: 30, marginTop: 4,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   borderRadius: '50%', fontSize: 13,
                   fontWeight: isToday || isSel ? 700 : 400,
                   background: isToday ? 'var(--blue)' : isSel ? 'var(--border)' : 'transparent',
                   color: isToday ? '#fff' : isSun ? 'var(--red)' : isSat ? 'var(--blue)' : 'var(--text-primary)',
                 }}>{day}</div>
+
+                {/* 展覽色塊 */}
+                {dayExhibitions.map((ex, idx) => (
+                  <div key={idx} style={{
+                    width: '100%', height: 14, marginTop: 2,
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    borderTopLeftRadius:     ex.position === 'start' || ex.position === 'single' ? 4 : 0,
+                    borderBottomLeftRadius:  ex.position === 'start' || ex.position === 'single' ? 4 : 0,
+                    borderTopRightRadius:    ex.position === 'end'   || ex.position === 'single' ? 4 : 0,
+                    borderBottomRightRadius: ex.position === 'end'   || ex.position === 'single' ? 4 : 0,
+                    display: 'flex', alignItems: 'center', overflow: 'hidden',
+                  }}>
+                    {(ex.position === 'start' || ex.position === 'single') && (
+                      <span style={{
+                        fontSize: 9, color: 'var(--red)',
+                        paddingLeft: 4, lineHeight: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                      }}>{ex.name}</span>
+                    )}
+                  </div>
+                ))}
+
+                {/* 事件點（藍/橘/綠） */}
                 {dayDots.length > 0 && (
                   <div style={{ display: 'flex', gap: 3, marginTop: 2 }}>
                     {dayDots.map((c, di) => (
@@ -203,25 +244,30 @@ function Calendar({ today }) {
           background: 'var(--card)', border: '1px solid var(--border)',
           borderRadius: 14, padding: '14px 16px', width: '100%', maxWidth: 480,
         }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: selData ? 10 : 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: hasAnyEvent ? 10 : 0 }}>
             {selected.replace(/-/g, '/')}
           </div>
-          {!selData ? (
+          {!hasAnyEvent ? (
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>這天沒有事件</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {selData.meetings.map((title, idx) => (
+              {selData?.meetings.map((title, idx) => (
                 <div key={idx} style={{ fontSize: 14, color: 'var(--text-primary)' }}>📅 {title}</div>
               ))}
-              {selData.todos > 0 && (
+              {selData?.todos > 0 && (
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>📋 {selData.todos} 筆待辦未完成</div>
               )}
-              {selData.milestones > 0 && (
+              {selData?.milestones > 0 && (
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>✅ {selData.milestones} 個里程碑完成</div>
               )}
-              {selData.exhibitions.map((name, idx) => (
-                <div key={idx} style={{ fontSize: 14, color: 'var(--text-primary)' }}>🎪 {name}</div>
-              ))}
+              {selectedExhibitions.map((ex, idx) => {
+                const total  = Math.round((new Date(ex.endDate) - new Date(ex.startDate)) / 86400000) + 1
+                const dayNum = Math.round((new Date(selected) - new Date(ex.startDate)) / 86400000) + 1
+                const info   = total > 1 ? `（第${dayNum}天，共${total}天）` : ''
+                return (
+                  <div key={idx} style={{ fontSize: 14, color: 'var(--text-primary)' }}>🎪 {ex.name}{info}</div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -246,23 +292,16 @@ export default function Home() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
-      {/* 頂部標題列 */}
       <header style={{
-        background: 'var(--card)',
-        borderBottom: '1px solid var(--border)',
-        height: 56,
-        padding: '0 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        background: 'var(--card)', borderBottom: '1px solid var(--border)',
+        height: 56, padding: '0 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 10,
       }}>
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-primary)' }}>
           公司任務中心
         </span>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-          {dateStr}
-        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{dateStr}</span>
       </header>
 
       <main style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
@@ -278,24 +317,16 @@ export default function Home() {
               className="card-animate"
               style={{
                 animationDelay: `${i * 80}ms`,
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: 14,
-                padding: '16px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                cursor: m.soon ? 'default' : 'pointer',
-                opacity: m.soon ? 0.55 : 1,
-                transition: 'box-shadow 0.15s, transform 0.15s',
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 14, padding: '16px 18px',
+                display: 'flex', alignItems: 'center', gap: 14,
+                cursor: 'pointer', transition: 'box-shadow 0.15s, transform 0.15s',
                 position: 'relative',
               }}
-              onClick={() => { if (!m.soon) navigate(m.path) }}
+              onClick={() => navigate(m.path)}
               onMouseEnter={e => {
-                if (!m.soon) {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.10)'
-                }
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.10)'
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.transform = 'translateY(0)'
@@ -307,18 +338,7 @@ export default function Home() {
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{m.label}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{m.desc}</div>
               </div>
-              {m.soon && (
-                <span style={{
-                  fontSize: 11, fontWeight: 600,
-                  background: 'var(--border)',
-                  color: 'var(--text-secondary)',
-                  borderRadius: 6, padding: '3px 8px',
-                  flexShrink: 0, whiteSpace: 'nowrap',
-                }}>即將推出</span>
-              )}
-              {m.pin && !m.soon && (
-                <span style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
-              )}
+              {m.pin && <span style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>}
             </div>
           ))}
         </div>
@@ -326,13 +346,16 @@ export default function Home() {
         {/* 行事曆圖例 */}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', paddingBottom: 24 }}>
           {[
-            { color: 'var(--blue)',   label: '會議記錄' },
-            { color: 'var(--orange)', label: '待辦事項' },
-            { color: 'var(--green)',  label: '里程碑完成' },
-            { color: 'var(--red)',    label: '展覽日' },
-          ].map(({ color, label }) => (
+            { color: 'var(--blue)',   label: '會議記錄',  dot: true  },
+            { color: 'var(--orange)', label: '待辦事項',  dot: true  },
+            { color: 'var(--green)',  label: '里程碑完成', dot: true  },
+            { color: 'rgba(239,68,68,0.6)', label: '展覽期間', dot: false },
+          ].map(({ color, label, dot }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'block', flexShrink: 0 }} />
+              {dot
+                ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'block', flexShrink: 0 }} />
+                : <span style={{ width: 16, height: 7, borderRadius: 2, background: color, display: 'block', flexShrink: 0 }} />
+              }
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
             </div>
           ))}
