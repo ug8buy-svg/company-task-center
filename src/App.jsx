@@ -1,0 +1,23 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import PinGate from './components/PinGate'
+import Home from './pages/Home'
+import Todos from './pages/Todos'
+import Notes from './pages/Notes'
+import Projects from './pages/Projects'
+import Checklist from './pages/Checklist'
+import Meetings from './pages/Meetings'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/todos" element={<PinGate><Todos /></PinGate>} />
+        <Route path="/notes" element={<PinGate><Notes /></PinGate>} />
+        <Route path="/projects" element={<PinGate><Projects /></PinGate>} />
+        <Route path="/checklist" element={<Checklist />} />
+        <Route path="/meetings" element={<Meetings />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}

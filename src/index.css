@@ -1,0 +1,114 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #FAFAFA;
+  --card: #FFFFFF;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B7280;
+  --blue: #2563EB;
+  --blue-hover: #1D4ED8;
+  --border: #E5E7EB;
+  --green: #16A34A;
+  --orange: #EA580C;
+  --red: #DC2626;
+  --note-bg: #FFFBEB;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111827;
+    --card: #1F2937;
+    --text-primary: #F9FAFB;
+    --text-secondary: #9CA3AF;
+    --blue: #3B82F6;
+    --blue-hover: #60A5FA;
+    --border: #374151;
+    --green: #22C55E;
+    --orange: #FB923C;
+    --red: #F87171;
+    --note-bg: rgba(66, 32, 6, 0.20);
+  }
+}
+
+body {
+  font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ── 卡片格線：手機單欄，桌機雙欄 ── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;
+}
+
+@media (min-width: 600px) {
+  .cards-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── 動畫 ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-10px); }
+  40%      { transform: translateX(10px); }
+  60%      { transform: translateX(-7px); }
+  80%      { transform: translateX(7px); }
+}
+
+.card-animate {
+  animation: fadeUp 0.4s ease both;
+}
+
+.cal-slide-right {
+  animation: slideInRight 0.22s ease both;
+}
+
+.cal-slide-left {
+  animation: slideInLeft 0.22s ease both;
+}
+
+.pin-shake {
+  animation: shake 0.38s ease;
+}
+
+@keyframes slideInTop {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in-top {
+  animation: slideInTop 0.28s ease both;
+}
