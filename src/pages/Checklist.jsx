@@ -97,7 +97,7 @@ function ChecklistCard({ checklist, items, onAddItem, onToggle, onDelete, onRese
       )}
 
       {/* 新增品項 */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
         <input
           ref={itemInputRef}
           value={itemInput}
@@ -105,10 +105,10 @@ function ChecklistCard({ checklist, items, onAddItem, onToggle, onDelete, onRese
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
           placeholder="新增品項..."
           style={{
-            flex: 1, padding: '8px 12px', fontSize: 14,
+            width: '100%', padding: '8px 12px', fontSize: 14,
             border: '1px solid var(--border)', borderRadius: 8,
             background: 'var(--bg)', color: 'var(--text-primary)',
-            outline: 'none', fontFamily: 'inherit',
+            outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
           }}
           onFocus={e => e.target.style.borderColor = 'var(--blue)'}
           onBlur={e => e.target.style.borderColor = 'var(--border)'}
@@ -118,7 +118,7 @@ function ChecklistCard({ checklist, items, onAddItem, onToggle, onDelete, onRese
           style={{
             background: 'var(--blue)', color: '#fff', border: 'none',
             borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap',
+            cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-end',
           }}
         >新增</button>
       </div>

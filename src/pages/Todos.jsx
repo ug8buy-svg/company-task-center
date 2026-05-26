@@ -171,7 +171,7 @@ export default function Todos() {
           background: 'var(--card)', border: '1px solid var(--border)',
           borderRadius: 14, padding: 16, marginBottom: 24,
         }}>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <input
               type="text"
               value={input}
@@ -179,12 +179,12 @@ export default function Todos() {
               onKeyDown={e => e.key === 'Enter' && addTodo()}
               placeholder="輸入待辦事項..."
               style={{
-                flex: 1, padding: '10px 14px',
+                width: '100%', padding: '10px 14px',
                 border: `2px solid ${inputError ? 'var(--red)' : 'var(--border)'}`,
                 borderRadius: 10, fontSize: 15,
                 background: 'var(--bg)', color: 'var(--text-primary)',
                 outline: 'none', fontFamily: 'inherit',
-                transition: 'border-color 0.18s',
+                transition: 'border-color 0.18s', boxSizing: 'border-box',
               }}
               onFocus={e => { if (!inputError) e.target.style.borderColor = 'var(--blue)' }}
               onBlur={e  => { if (!inputError) e.target.style.borderColor = 'var(--border)' }}
@@ -195,7 +195,7 @@ export default function Todos() {
                 background: 'var(--blue)', color: '#fff',
                 border: 'none', borderRadius: 10,
                 padding: '10px 20px', fontSize: 15, fontWeight: 600,
-                whiteSpace: 'nowrap',
+                whiteSpace: 'nowrap', alignSelf: 'flex-end', cursor: 'pointer',
               }}
             >新增</button>
           </div>
