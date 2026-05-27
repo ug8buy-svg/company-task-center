@@ -9,15 +9,17 @@ function ItemRow({ item, onToggle, onDelete }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
       <div
         onClick={() => onToggle(item)}
-        style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+        style={{ padding: 10, margin: -10, flexShrink: 0, cursor: 'pointer' }}
+      >
+        <div style={{
+          width: 22, height: 22, borderRadius: 6,
           border: `2px solid ${item.is_done ? 'var(--blue)' : 'var(--border)'}`,
           background: item.is_done ? 'var(--blue)' : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', transition: 'all 0.15s',
-        }}
-      >
-        {item.is_done && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✓</span>}
+          transition: 'all 0.15s',
+        }}>
+          {item.is_done && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✓</span>}
+        </div>
       </div>
       <span style={{
         flex: 1, fontSize: 15,
@@ -30,7 +32,7 @@ function ItemRow({ item, onToggle, onDelete }) {
         onMouseEnter={() => setDelHover(true)}
         onMouseLeave={() => setDelHover(false)}
         style={{
-          background: 'none', border: 'none', padding: '2px 4px',
+          background: 'none', border: 'none', padding: 10,
           fontSize: 16, color: delHover ? 'var(--red)' : 'var(--text-secondary)',
           cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s', lineHeight: 1,
         }}

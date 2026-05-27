@@ -27,17 +27,18 @@ function TodoItem({ todo, isNew, onToggle, onDelete }) {
     >
       <div
         onClick={() => onToggle(todo)}
-        style={{
+        style={{ padding: 10, margin: -10, flexShrink: 0, cursor: 'pointer' }}
+      >
+        <div style={{
           width: 22, height: 22,
           borderRadius: 6,
           border: `2px solid ${todo.is_done ? 'var(--blue)' : 'var(--border)'}`,
           background: todo.is_done ? 'var(--blue)' : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', flexShrink: 0,
           transition: 'all 0.18s',
-        }}
-      >
-        {todo.is_done && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✓</span>}
+        }}>
+          {todo.is_done && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✓</span>}
+        </div>
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -64,7 +65,7 @@ function TodoItem({ todo, isNew, onToggle, onDelete }) {
           background: 'none', border: 'none',
           fontSize: 18,
           color: delHover ? 'var(--red)' : 'var(--text-secondary)',
-          padding: '4px 6px', borderRadius: 6,
+          padding: 10, borderRadius: 6,
           lineHeight: 1, flexShrink: 0,
           transition: 'color 0.18s',
         }}

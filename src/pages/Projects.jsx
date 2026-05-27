@@ -29,15 +29,17 @@ function MilestoneRow({ item, onToggle, onDelete }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
       <div
         onClick={() => onToggle(item)}
-        style={{
-          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+        style={{ padding: 10, margin: -10, flexShrink: 0, cursor: 'pointer' }}
+      >
+        <div style={{
+          width: 18, height: 18, borderRadius: 4,
           border: `2px solid ${item.is_done ? 'var(--blue)' : 'var(--border)'}`,
           background: item.is_done ? 'var(--blue)' : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', transition: 'all 0.15s',
-        }}
-      >
-        {item.is_done && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+          transition: 'all 0.15s',
+        }}>
+          {item.is_done && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+        </div>
       </div>
       <span style={{
         flex: 1, fontSize: 14,
@@ -50,7 +52,7 @@ function MilestoneRow({ item, onToggle, onDelete }) {
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
-          background: 'none', border: 'none', padding: '2px 4px',
+          background: 'none', border: 'none', padding: 10,
           fontSize: 14, color: hover ? 'var(--red)' : 'var(--text-secondary)',
           cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s', lineHeight: 1,
         }}

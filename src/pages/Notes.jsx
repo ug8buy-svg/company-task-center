@@ -27,11 +27,11 @@ function NoteCard({ note, isNew, onDelete }) {
         onMouseEnter={() => setDelHover(true)}
         onMouseLeave={() => setDelHover(false)}
         style={{
-          position: 'absolute', top: 10, right: 10,
+          position: 'absolute', top: 4, right: 4,
           background: 'none', border: 'none',
           fontSize: 16,
           color: delHover ? 'var(--red)' : 'var(--text-secondary)',
-          padding: '4px 6px', borderRadius: 6, lineHeight: 1,
+          padding: 10, borderRadius: 6, lineHeight: 1,
           transition: 'color 0.18s',
         }}
       >🗑️</button>
