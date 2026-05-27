@@ -1,0 +1,114 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：11
+步驟：PWA 設定（讓網站可以加到手機主畫面）
+建立日期：2026/05/27
+================================================================
+
+我要把「公司任務中心」設定成 PWA（Progressive Web App），
+讓使用者可以把網站加到手機主畫面，像 App 一樣使用。
+
+【PWA 的效果】
+- 手機瀏覽器打開網站後，可以「加到主畫面」
+- 點開後沒有瀏覽器網址列，全螢幕顯示
+- 有自己的 App 圖示
+- 有新版本時提示使用者重新整理
+
+【請幫我完成以下工作】
+
+1. 建立 manifest.json
+   放在 public/ 資料夾，內容如下：
+   ```json
+   {
+     "name": "公司任務中心",
+     "short_name": "任務中心",
+     "description": "公司內部任務管理系統",
+     "start_url": "/",
+     "display": "standalone",
+     "background_color": "#FAFAFA",
+     "theme_color": "#2563EB",
+     "orientation": "portrait",
+     "icons": [
+       {
+         "src": "/icon-192.png",
+         "sizes": "192x192",
+         "type": "image/png"
+       },
+       {
+         "src": "/icon-512.png",
+         "sizes": "512x512",
+         "type": "image/png"
+       }
+     ]
+   }
+   ```
+
+2. 建立簡單的 App 圖示
+   因為目前沒有設計好的圖示，請用程式產生兩個簡單的圖示：
+   - icon-192.png：192x192 像素，藍色背景（#2563EB），白色文字「任務」
+   - icon-512.png：512x512 像素，同樣設計
+   放在 public/ 資料夾
+
+3. 修改 index.html
+   在 <head> 裡加入：
+   ```html
+   <link rel="manifest" href="/manifest.json">
+   <meta name="theme-color" content="#2563EB">
+   <meta name="apple-mobile-web-app-capable" content="yes">
+   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+   <meta name="apple-mobile-web-app-title" content="任務中心">
+   <link rel="apple-touch-icon" href="/icon-192.png">
+   ```
+
+4. 建立 Service Worker
+   放在 public/sw.js，功能：
+   - 快取 App Shell（HTML、CSS、JS）
+   - 有新版本時，自動通知使用者「有新版本，點此更新」
+   - 網路斷線時顯示快取版本（資料會是舊的，但至少不會白畫面）
+
+5. 在 src/main.jsx 註冊 Service Worker
+   在最後加入：
+   ```javascript
+   if ('serviceWorker' in navigator) {
+     window.addEventListener('load', () => {
+       navigator.serviceWorker.register('/sw.js').then(reg => {
+         reg.onupdatefound = () => {
+           const newWorker = reg.installing;
+           newWorker.onstatechange = () => {
+             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+               // 有新版本，顯示提示
+               if (confirm('系統有新版本，是否立即更新？')) {
+                 newWorker.postMessage({ type: 'SKIP_WAITING' });
+                 window.location.reload();
+               }
+             }
+           };
+         };
+       });
+     });
+   }
+   ```
+
+【注意事項】
+- 修改範圍：
+  * public/manifest.json（新增）
+  * public/icon-192.png（新增）
+  * public/icon-512.png（新增）
+  * public/sw.js（新增）
+  * index.html（修改）
+  * src/main.jsx（修改）
+- 不要動其他任何檔案
+- 改完請告訴我改了什麼，不要只丟 diff
+- build 完確認沒有錯誤
+
+【完成後請告訴我】
+1. 建立和修改了哪些檔案
+2. 怎麼在手機上測試 PWA 是否正常（加到主畫面的步驟）
+3. build 結果是否成功
+
+================================================================
+備注：
+- 這是整個系統的最後一個功能
+- 完成後 git push，Vercel 自動部署
+- 部署完成後通知老闆和仕庭把網站加到手機主畫面
+================================================================
