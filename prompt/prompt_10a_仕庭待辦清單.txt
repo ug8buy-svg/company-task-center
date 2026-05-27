@@ -1,0 +1,108 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：10a
+步驟：仕庭待辦清單
+建立日期：2026/05/27
+================================================================
+
+我要新增「仕庭待辦清單」功能頁面。
+這個頁面不需要 PIN 碼，所有人都可以直接進入使用。
+
+【功能說明】
+這個清單是給仕庭確認用的。
+我（管理者）負責新增和刪除項目，仕庭負責打勾確認完成。
+老闆也可以看到這份清單的進度。
+
+【資料表】
+需要新增一張資料表：staff_todos
+
+請在 Supabase 執行以下 SQL 建立資料表：
+
+CREATE TABLE staff_todos (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  content text NOT NULL,
+  is_done boolean DEFAULT false,
+  done_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE staff_todos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "allow_all" ON staff_todos
+  FOR ALL USING (true) WITH CHECK (true);
+
+【頁面功能需求】
+功能與 Todos.jsx（劉姐待辦清單）完全相同：
+
+1. 顯示待辦清單
+   - 未完成的項目排在上方
+   - 已完成的項目排在下方，文字變灰色、有刪除線
+   - 已完成的項目保留不刪除（留紀錄）
+   - 每筆項目顯示：勾選框、內容文字、建立時間
+
+2. 新增待辦項目
+   - 頁面上方有一個輸入框 + 新增按鈕
+   - 輸入內容後按新增，立即出現在清單裡
+   - 輸入框清空，可以繼續新增下一筆
+   - 內容不可空白，空白送出要提示錯誤
+
+3. 打勾完成
+   - 點勾選框 → is_done = true，done_at = 現在時間
+   - 項目移到「已完成」區域，文字變灰、加刪除線
+   - 再次點勾選框 → 取消完成（is_done = false，done_at = null）
+
+4. 刪除項目
+   - 每筆項目右側有刪除按鈕（垃圾桶圖示）
+   - 點刪除前顯示確認提示：「確定要刪除這筆待辦嗎？」
+   - 確認後從資料庫永久刪除
+
+5. 空狀態
+   - 清單是空的時候，顯示「目前沒有待辦事項」
+
+【UI 設計規範】
+完全沿用 Todos.jsx 的設計風格，唯一差異：
+- 頁面標題改成「仕庭待辦清單」
+- 不需要 PIN 碼保護
+
+【首頁卡片更新】
+請同時修改 src/pages/Home.jsx：
+- 在六張功能卡片中，「展覽清點表」和「會議記錄」中間位置
+- 但目前已有六張卡片，請把「仕庭待辦清單」加到卡片列表最後（第七張）
+- 卡片內容：
+  * 圖示：📝
+  * 標題：仕庭待辦清單
+  * 說明：需仕庭確認的事項
+  * 不需要鎖頭圖示（不需要 PIN）
+  * 點擊導向 /staff-todos
+
+【路由】
+請同時修改 src/App.jsx：
+- 新增路由：/staff-todos
+- 不需要 PinGate 包覆
+
+【Supabase 操作說明】
+- 讀取：SELECT * FROM staff_todos ORDER BY created_at ASC
+- 新增：INSERT INTO staff_todos (content)
+- 打勾：UPDATE staff_todos SET is_done = true, done_at = now() WHERE id = ?
+- 取消打勾：UPDATE staff_todos SET is_done = false, done_at = null WHERE id = ?
+- 刪除：DELETE FROM staff_todos WHERE id = ?
+
+【注意事項】
+- 新增檔案：src/pages/StaffTodos.jsx
+- 修改檔案：src/App.jsx（新增路由）、src/pages/Home.jsx（新增卡片）
+- 不要動其他頁面
+- 不要動 src/index.css
+- 改完請告訴我改了什麼，不要只丟 diff
+- 資料讀取中顯示「載入中...」
+
+【完成後請告訴我】
+1. 建立了哪些檔案，修改了哪些檔案
+2. Supabase 資料表是否建立成功
+3. 功能測試結果
+
+================================================================
+備注：
+- 這份指令對應建置順序第十步（a）
+- 完成後進行 LINE Bot 申請，再出 prompt_10b（LINE 通知串接）
+- staff_todos 表格之後 LINE 通知會用到
+================================================================

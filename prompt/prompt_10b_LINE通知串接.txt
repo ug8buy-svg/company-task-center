@@ -1,0 +1,165 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：10b
+步驟：LINE 通知串接
+建立日期：2026/05/27
+================================================================
+
+我要建立 LINE Bot 自動推播通知功能。
+使用 Supabase Edge Function + Supabase Cron Job 實作。
+
+【三個使用者的資料】
+users 表格已有以下資料：
+- 阿緯（admin）：line_id = U3a983f99ef023dce3ba41b5229d8fe94
+- 劉淑華（boss）：line_id = U60f1d14468f1f8f68075576a8e331c11
+- 仕庭（staff）：line_id = Uee29da8b0a627413c2e9da766b1d016e
+
+【LINE Bot 資訊】
+- Channel Access Token：已設定在 Edge Function Secrets（LINE_CHANNEL_ACCESS_TOKEN）
+- 發送訊息 API：POST https://api.line.me/v2/bot/message/push
+
+【通知邏輯】
+
+▌通知一：展前待辦提醒（每天早晚各一次）
+
+觸發條件：
+- 距離展覽開始日（exhibitions.event_date）在 notify_days_before 天以內
+- 且展覽還沒開始（event_date >= 今天）
+
+劉淑華收到的通知（boss_todos 有未完成項目時）：
+```
+📋 展覽提醒｜[展覽名稱]
+
+距離展覽還有 X 天，以下待辦事項尚未完成：
+
+• [待辦內容1]
+• [待辦內容2]
+...
+
+請進入任務中心確認完成。
+```
+
+仕庭收到的通知（staff_todos 有未完成項目時）：
+```
+📋 展覽提醒｜[展覽名稱]
+
+距離展覽還有 X 天，以下待辦事項尚未完成：
+
+• [待辦內容1]
+• [待辦內容2]
+...
+
+請進入任務中心確認完成。
+```
+
+阿緯（我）收到的通知（當有任何人的待辦未完成時，每天只收一次）：
+```
+📊 待辦狀況摘要｜[展覽名稱]
+
+距離展覽還有 X 天
+
+劉姐待辦：X 項未完成
+仕庭待辦：X 項未完成
+
+請前往任務中心查看。
+```
+
+▌通知二：待辦全部完成通知（即時觸發）
+
+當劉淑華或仕庭把自己的所有待辦都打勾完成時：
+
+阿緯收到：
+```
+✅ [劉淑華/仕庭] 已完成所有待辦事項！
+展覽：[展覽名稱]
+完成時間：[時間]
+```
+
+【實作方式】
+
+1. 建立發送通知的 Edge Function
+   名稱：send-line-notification
+   功能：
+   - 接收參數：line_id、訊息內容
+   - 呼叫 LINE Bot API 發送訊息
+   - 回傳發送結果
+
+2. 建立定時檢查的 Edge Function
+   名稱：check-and-notify
+   功能：
+   - 查詢所有即將到來的展覽
+   - 對每個展覽計算距離天數
+   - 查詢 boss_todos 和 staff_todos 的未完成項目
+   - 依照通知邏輯決定要發給誰、發什麼內容
+   - 呼叫 send-line-notification 發送
+
+3. 建立 Cron Job（定時排程）
+   使用 Supabase pg_cron 設定：
+   - 每天早上 09:00（台灣時間）執行一次
+   - 每天晚上 20:00（台灣時間）執行一次
+   
+   台灣時間 = UTC+8，所以：
+   - 09:00 台灣 = 01:00 UTC
+   - 20:00 台灣 = 12:00 UTC
+
+   SQL：
+   ```sql
+   SELECT cron.schedule(
+     'morning-notification',
+     '0 1 * * *',
+     $$SELECT net.http_post(
+       url := 'https://qvmhcglheoeudxzqrlyv.supabase.co/functions/v1/check-and-notify',
+       headers := '{"Content-Type": "application/json", "Authorization": "Bearer [SUPABASE_ANON_KEY]"}'::jsonb,
+       body := '{}'::jsonb
+     )$$
+   );
+
+   SELECT cron.schedule(
+     'evening-notification',
+     '0 12 * * *',
+     $$SELECT net.http_post(
+       url := 'https://qvmhcglheoeudxzqrlyv.supabase.co/functions/v1/check-and-notify',
+       headers := '{"Content-Type": "application/json", "Authorization": "Bearer [SUPABASE_ANON_KEY]"}'::jsonb,
+       body := '{}'::jsonb
+     )$$
+   );
+   ```
+   請把 [SUPABASE_ANON_KEY] 替換成實際的 anon key。
+
+4. 待辦全部完成的即時通知
+   在 check-and-notify 裡加入檢查邏輯：
+   - 查詢 boss_todos：如果所有項目都是 is_done = true，且最後一筆 done_at 是今天，發送完成通知給阿緯
+   - 查詢 staff_todos：同上邏輯
+
+【需要的 Secrets】
+Edge Function Secrets 已有：
+- LINE_CHANNEL_SECRET
+- LINE_CHANNEL_ACCESS_TOKEN
+
+需要新增：
+- SUPABASE_URL = https://qvmhcglheoeudxzqrlyv.supabase.co
+- SUPABASE_SERVICE_ROLE_KEY（需要用 service role key 才能讀取資料）
+
+請告訴我 service role key 在哪裡取得，我自己填入，不要你知道。
+
+【注意事項】
+- 新增檔案：
+  * supabase/functions/send-line-notification/index.ts
+  * supabase/functions/check-and-notify/index.ts
+- 不要動前端任何檔案
+- 不要動資料表結構
+- 部署兩個 Edge Function 都要加 --no-verify-jwt
+- 改完請告訴我改了什麼，不要只丟 diff
+
+【完成後請告訴我】
+1. 兩個 Edge Function 是否部署成功
+2. Cron Job 設定方式（SQL 要在哪裡執行）
+3. 怎麼手動測試通知是否正常發送
+4. service role key 在哪裡取得
+
+================================================================
+備注：
+- 這是整個系統的最後一個功能
+- 完成後整個公司任務中心就大功告成了
+- 之後記得 git push 讓 Vercel 更新
+================================================================

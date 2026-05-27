@@ -1,0 +1,110 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：01
+步驟：建立 Supabase 資料庫結構（11張資料表）
+建立日期：2026/05/26
+================================================================
+
+我要建立一個「公司任務中心」的 Supabase 資料庫結構。
+
+Supabase 連線資訊：
+- Project URL：https://qvmhcglheoeudxzqrlyv.supabase.co
+- Anon Key：sb_publishable_kYOQ02-XGqRKStsMa-bImA_i-sdaK9j
+
+請幫我在這個 Supabase 專案裡，用 SQL 建立以下 11 張資料表。
+請使用 Supabase 的 SQL Editor 執行，或產生一份 schema.sql 檔案讓我可以貼到 SQL Editor 執行。
+
+【表格一】users（使用者）
+- id：uuid，主鍵，自動產生
+- email：文字，不可空白
+- role：文字，只能是 admin / boss / staff
+- name：文字，顯示名稱
+- line_id：文字，LINE 登入用的識別碼
+- avatar_url：文字，LINE 大頭貼網址
+- created_at：時間，自動填入
+
+【表格二】boss_todos（老闆待辦清單）
+- id：uuid，主鍵，自動產生
+- content：文字，待辦內容，不可空白
+- is_done：布林值，預設 false
+- done_at：時間，打勾時填入
+- created_at：時間，自動填入
+
+【表格三】boss_notes（老闆專屬備注）
+- id：uuid，主鍵，自動產生
+- content：文字，備注內容，不可空白
+- created_at：時間，自動填入
+
+【表格四】projects（專案）
+- id：uuid，主鍵，自動產生
+- name：文字，專案名稱，不可空白
+- status：文字，只能是 進行中 / 等待中 / 卡關 / 尚未開始
+- latest_update：文字，最新進度一句話
+- next_deadline：日期
+- created_at：時間，自動填入
+
+【表格五】milestones（里程碑）
+- id：uuid，主鍵，自動產生
+- project_id：uuid，對應 projects 的 id，刪除專案時一起刪除
+- content：文字，里程碑內容，不可空白
+- is_done：布林值，預設 false
+- done_at：時間
+- sort_order：數字，排列順序，預設 0
+- created_at：時間，自動填入
+
+【表格六】exhibitions（展覽設定）
+- id：uuid，主鍵，自動產生
+- name：文字，展覽名稱，不可空白
+- event_date：日期，展覽日期，不可空白
+- notify_days_before：數字，提前幾天開始通知，預設 14
+- created_at：時間，自動填入
+
+【表格七】checklists（展覽清點表）
+- id：uuid，主鍵，自動產生
+- exhibition_id：uuid，對應 exhibitions 的 id
+- title：文字，清單名稱，不可空白
+- is_archived：布林值，是否封存，預設 false
+- created_at：時間，自動填入
+
+【表格八】checklist_items（清點品項）
+- id：uuid，主鍵，自動產生
+- checklist_id：uuid，對應 checklists 的 id，刪除清單時一起刪除
+- content：文字，品項名稱，不可空白
+- is_done：布林值，預設 false
+- done_at：時間
+- sort_order：數字，預設 0
+- created_at：時間，自動填入
+
+【表格九】meetings（會議）
+- id：uuid，主鍵，自動產生
+- title：文字，會議名稱，不可空白
+- meeting_date：日期，不可空白
+- created_at：時間，自動填入
+
+【表格十】meeting_entries（會議條目）
+- id：uuid，主鍵，自動產生
+- meeting_id：uuid，對應 meetings 的 id，刪除會議時一起刪除
+- content：文字，條目內容，不可空白
+- created_by：uuid，對應 users 的 id
+- created_by_name：文字，顯示名稱（備用）
+- created_at：時間，自動填入
+
+【表格十一】notification_settings（通知設定）
+- id：uuid，主鍵，自動產生
+- user_id：uuid，對應 users 的 id
+- line_user_id：文字，LINE 的使用者 ID
+- notify_enabled：布林值，是否開啟通知，預設 true
+- created_at：時間，自動填入
+
+完成後請告訴我：
+1. 哪些表格建立成功
+2. 有沒有任何錯誤
+3. 不要動其他任何東西
+
+================================================================
+備注：
+- 這份指令對應建置順序第一步
+- 完成後下一步是建立登入系統（LINE 登入）
+- Supabase 專案名稱：company-task-center
+- Region：Northeast Asia（Tokyo）
+================================================================
