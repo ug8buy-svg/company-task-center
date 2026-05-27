@@ -179,12 +179,16 @@ function Calendar({ today }) {
             const isSat   = (i % 7) === 6
             const dayDots = dots[key] || []
 
+            const colIndex = i % 7
             const dayExhibitions = exhibitionsList.map(ex => {
               if (key < ex.startDate || key > ex.endDate) return null
               const isStart = key === ex.startDate
               const isEnd   = key === ex.endDate
               const position = isStart && isEnd ? 'single' : isStart ? 'start' : isEnd ? 'end' : 'middle'
-              return { name: ex.name, position }
+              const isFirstInRow = isStart || colIndex === 0
+              const daysLeftInEx = Math.round((new Date(ex.endDate) - new Date(key)) / 86400000)
+              const labelWidthCells = isFirstInRow ? Math.min(daysLeftInEx, 6 - colIndex) + 1 : 0
+              return { name: ex.name, position, isFirstInRow, labelWidthCells }
             }).filter(Boolean)
 
             return (
@@ -204,25 +208,37 @@ function Calendar({ today }) {
                 }}>{day}</div>
 
                 {/* 展覽色塊 */}
-                {dayExhibitions.map((ex, idx) => (
-                  <div key={idx} style={{
-                    width: '100%', height: 14, marginTop: 2,
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    borderTopLeftRadius:     ex.position === 'start' || ex.position === 'single' ? 4 : 0,
-                    borderBottomLeftRadius:  ex.position === 'start' || ex.position === 'single' ? 4 : 0,
-                    borderTopRightRadius:    ex.position === 'end'   || ex.position === 'single' ? 4 : 0,
-                    borderBottomRightRadius: ex.position === 'end'   || ex.position === 'single' ? 4 : 0,
-                    display: 'flex', alignItems: 'center', overflow: 'hidden',
-                  }}>
-                    {(ex.position === 'start' || ex.position === 'single') && (
-                      <span style={{
-                        fontSize: 9, color: 'var(--red)',
-                        paddingLeft: 4, lineHeight: 1,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-                      }}>{ex.name}</span>
-                    )}
-                  </div>
-                ))}
+                {dayExhibitions.map((ex, idx) => {
+                  const isLeft  = ex.position === 'start' || ex.position === 'single'
+                  const isRight = ex.position === 'end'   || ex.position === 'single'
+                  return (
+                    <div key={idx} style={{
+                      height: 14, marginTop: 2,
+                      alignSelf: 'stretch',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      borderTopLeftRadius:     isLeft  ? 4 : 0,
+                      borderBottomLeftRadius:  isLeft  ? 4 : 0,
+                      borderTopRightRadius:    isRight ? 4 : 0,
+                      borderBottomRightRadius: isRight ? 4 : 0,
+                      marginLeft:  isLeft  ? 3 : 0,
+                      marginRight: isRight ? 3 : 0,
+                      position: 'relative',
+                      zIndex: ex.isFirstInRow ? 2 : 1,
+                      overflow: 'visible',
+                    }}>
+                      {ex.isFirstInRow && (
+                        <span style={{
+                          position: 'absolute', left: 0,
+                          width: `${ex.labelWidthCells * 100}%`,
+                          textAlign: 'center',
+                          fontSize: 9, color: 'var(--red)', lineHeight: '14px',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          pointerEvents: 'none',
+                        }}>{ex.name}</span>
+                      )}
+                    </div>
+                  )
+                })}
 
                 {/* 事件點（藍/橘/綠） */}
                 {dayDots.length > 0 && (
