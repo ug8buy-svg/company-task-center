@@ -7,6 +7,7 @@ import Projects from './pages/Projects'
 import Checklist from './pages/Checklist'
 import Meetings from './pages/Meetings'
 import Notifications from './pages/Notifications'
+import StaffTodos from './pages/StaffTodos'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/checklist" element={<Checklist />} />
         <Route path="/meetings" element={<Meetings />} />
         <Route path="/notifications" element={<PinGate><Notifications /></PinGate>} />
+        <Route path="/staff-todos" element={<StaffTodos />} />
       </Routes>
     </BrowserRouter>
   )
