@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 
-const PIN_KEY   = 'pin_unlocked_at'
-const EXPIRE_MS = 24 * 60 * 60 * 1000
+const PIN_KEY      = 'pin_unlocked_at'
+const FAIL_KEY     = 'pin_fail_count'
+const LOCKOUT_KEY  = 'pin_lockout_until'
+const EXPIRE_MS    = 24 * 60 * 60 * 1000
+const LOCKOUT_MS   = 5 * 60 * 1000
+const MAX_FAILS    = 5
 
 function isUnlocked() {
   const ts = localStorage.getItem(PIN_KEY)
@@ -9,16 +13,48 @@ function isUnlocked() {
   return Date.now() - Number(ts) < EXPIRE_MS
 }
 
+function getLockoutRemaining() {
+  const until = Number(localStorage.getItem(LOCKOUT_KEY) || 0)
+  const remaining = until - Date.now()
+  return remaining > 0 ? remaining : 0
+}
+
+function recordFail() {
+  const count = Number(localStorage.getItem(FAIL_KEY) || 0) + 1
+  localStorage.setItem(FAIL_KEY, String(count))
+  if (count >= MAX_FAILS) {
+    localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS))
+    localStorage.setItem(FAIL_KEY, '0')
+  }
+  return count
+}
+
+function clearFails() {
+  localStorage.removeItem(FAIL_KEY)
+  localStorage.removeItem(LOCKOUT_KEY)
+}
+
 export default function PinGate({ children }) {
-  const [unlocked, setUnlocked] = useState(isUnlocked)
-  const [digits,   setDigits]   = useState(['', '', '', ''])
-  const [error,    setError]    = useState(false)
-  const [shaking,  setShaking]  = useState(false)
+  const [unlocked,  setUnlocked]  = useState(isUnlocked)
+  const [digits,    setDigits]    = useState(['', '', '', ''])
+  const [error,     setError]     = useState(false)
+  const [shaking,   setShaking]   = useState(false)
+  const [lockout,   setLockout]   = useState(getLockoutRemaining)
   const refs = [useRef(), useRef(), useRef(), useRef()]
 
   useEffect(() => {
     if (!unlocked) setTimeout(() => refs[0].current?.focus(), 100)
   }, [unlocked])
+
+  useEffect(() => {
+    if (lockout <= 0) return
+    const id = setInterval(() => {
+      const remaining = getLockoutRemaining()
+      setLockout(remaining)
+      if (remaining <= 0) clearInterval(id)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [lockout])
 
   function handleChange(i, val) {
     if (!/^\d?$/.test(val)) return
@@ -37,10 +73,15 @@ export default function PinGate({ children }) {
   }
 
   function verify(pin) {
+    if (getLockoutRemaining() > 0) return
     if (pin === import.meta.env.VITE_PIN_CODE) {
+      clearFails()
       localStorage.setItem(PIN_KEY, String(Date.now()))
       setUnlocked(true)
     } else {
+      recordFail()
+      const remaining = getLockoutRemaining()
+      setLockout(remaining)
       setShaking(true)
       setError(true)
       setDigits(['', '', '', ''])
@@ -102,7 +143,12 @@ export default function PinGate({ children }) {
           ))}
         </div>
 
-        {error && (
+        {lockout > 0 && (
+          <p style={{ color: 'var(--red)', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
+            錯誤次數過多，請等待 {Math.ceil(lockout / 1000)} 秒後再試
+          </p>
+        )}
+        {!lockout && error && (
           <p style={{ color: 'var(--red)', fontSize: 13, fontWeight: 500 }}>
             PIN 碼錯誤，請再試一次
           </p>
