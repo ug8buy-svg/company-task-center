@@ -304,25 +304,30 @@ function AccountingForm({ onSave, onCancel }) {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>支出明細</div>
         {expenses.map(e => (
-          <div key={e.tempId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <select
-              value={e.category}
-              onChange={ev => updateExpense(e.tempId, { ...e, category: ev.target.value, note: ev.target.value !== '雜項' ? '' : e.note })}
-              style={{ padding: '8px 6px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none', flexShrink: 0 }}
-            >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div key={e.tempId} style={{ marginBottom: 10 }}>
+            {/* 第一行：類別 + 金額 + 刪除 */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={e.category}
+                onChange={ev => updateExpense(e.tempId, { ...e, category: ev.target.value, note: ev.target.value !== '雜項' ? '' : e.note })}
+                style={{ flex: 1, padding: '8px 6px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }}
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input type="number" value={e.amount} placeholder="金額"
+                onChange={ev => updateExpense(e.tempId, { ...e, amount: ev.target.value })}
+                style={{ ...inp, width: 110, flexShrink: 0 }}
+                onFocus={ev => ev.target.style.borderColor = 'var(--blue)'} onBlur={ev => ev.target.style.borderColor = 'var(--border)'} />
+              <button onClick={() => removeExpense(e.tempId)}
+                style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, padding: '0 4px', lineHeight: 1 }}>🗑️</button>
+            </div>
+            {/* 第二行：雜項說明（僅雜項顯示） */}
             {e.category === '雜項' && (
               <input value={e.note} onChange={ev => updateExpense(e.tempId, { ...e, note: ev.target.value })}
-                placeholder="說明" style={{ ...inp, flex: 1, width: 'auto' }}
+                placeholder="請填說明（例：文具、膠帶）"
+                style={{ ...inp, marginTop: 6 }}
                 onFocus={ev => ev.target.style.borderColor = 'var(--blue)'} onBlur={ev => ev.target.style.borderColor = 'var(--border)'} />
             )}
-            <input type="number" value={e.amount} placeholder="金額"
-              onChange={ev => updateExpense(e.tempId, { ...e, amount: ev.target.value })}
-              style={{ ...inp, width: e.category === '雜項' ? 90 : 130, flexShrink: 0 }}
-              onFocus={ev => ev.target.style.borderColor = 'var(--blue)'} onBlur={ev => ev.target.style.borderColor = 'var(--border)'} />
-            <button onClick={() => removeExpense(e.tempId)}
-              style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, padding: '0 4px', lineHeight: 1 }}>🗑️</button>
           </div>
         ))}
         <button onClick={addExpense}
