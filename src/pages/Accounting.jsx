@@ -267,7 +267,8 @@ function AccountingForm({ onSave, onCancel }) {
         </div>
         <div>
           <label style={lbl}>展覽開始日期</label>
-          <input type="date" value={startDate} onChange={e => handleStartDateChange(e.target.value)} style={inp}
+          <input type="date" value={startDate} onChange={e => handleStartDateChange(e.target.value)}
+            style={{ ...inp, WebkitAppearance: 'none', appearance: 'none', textAlign: 'left' }}
             onFocus={e => e.target.style.borderColor = 'var(--blue)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
         </div>
         <div>
