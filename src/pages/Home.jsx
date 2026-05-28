@@ -16,6 +16,7 @@ const DAY_NAMES   = ['星期日','星期一','星期二','星期三','星期四'
 const MODULES = [
   { icon: '📋', label: '劉姐待辦清單', desc: '需劉姐確認的事項',    path: '/todos',         pin: true  },
   { icon: '📝', label: '劉姐專屬備注', desc: '僅限劉姐與管理者',    path: '/notes',         pin: true  },
+  { icon: '💰', label: '劉姐旅展帳務', desc: '展覽收支結算記錄',    path: '/accounting',    pin: true  },
   { icon: '📊', label: '專案進度看板', desc: '三個專案的進度追蹤',  path: '/projects',      pin: true  },
   { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',      pin: false },
   { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist',     pin: false },
@@ -42,6 +43,7 @@ async function fetchMonthEvents(yr, mo) {
     { data: tData  },
     { data: msData },
     { data: eData  },
+    { data: acData },
   ] = await Promise.all([
     supabase.from('meetings').select('meeting_date, title')
       .gte('meeting_date', dateStart).lt('meeting_date', dateEnd),
@@ -51,6 +53,8 @@ async function fetchMonthEvents(yr, mo) {
       .eq('is_done', true).not('done_at', 'is', null)
       .gte('done_at', tsStart).lt('done_at', tsEnd),
     supabase.from('exhibitions').select('event_date, end_date, name'),
+    supabase.from('accounting_records').select('start_date, title')
+      .eq('is_settled', false).gte('start_date', dateStart).lt('start_date', dateEnd),
   ])
 
   const dots = {}
@@ -61,7 +65,7 @@ async function fetchMonthEvents(yr, mo) {
     if (!dots[ds].includes(color)) dots[ds].push(color)
   }
   const ensureSum = (ds) => {
-    if (!summ[ds]) summ[ds] = { meetings: [], todos: 0, milestones: 0 }
+    if (!summ[ds]) summ[ds] = { meetings: [], todos: 0, milestones: 0, accounting: [] }
   }
 
   for (const m of (mData  || [])) {
@@ -80,6 +84,12 @@ async function fetchMonthEvents(yr, mo) {
     addDot(ds, 'green')
     ensureSum(ds)
     summ[ds].milestones++
+  }
+
+  for (const a of (acData || [])) {
+    addDot(a.start_date, 'orange')
+    ensureSum(a.start_date)
+    summ[a.start_date].accounting.push(a.title)
   }
 
   for (const ds in dots) {
@@ -274,6 +284,9 @@ function Calendar({ today }) {
               {selData?.todos > 0 && (
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>📋 {selData.todos} 筆待辦未完成</div>
               )}
+              {selData?.accounting?.map((title, idx) => (
+                <div key={idx} style={{ fontSize: 14, color: 'var(--orange)' }}>💰 {title} 帳務未結</div>
+              ))}
               {selData?.milestones > 0 && (
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>✅ {selData.milestones} 個里程碑完成</div>
               )}
@@ -364,7 +377,7 @@ export default function Home() {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', paddingBottom: 24 }}>
           {[
             { color: 'var(--blue)',   label: '會議記錄',  dot: true  },
-            { color: 'var(--orange)', label: '待辦事項',  dot: true  },
+            { color: 'var(--orange)', label: '待辦 / 帳務未結', dot: true  },
             { color: 'var(--green)',  label: '里程碑完成', dot: true  },
             { color: 'rgba(239,68,68,0.6)', label: '展覽期間', dot: false },
           ].map(({ color, label, dot }) => (
