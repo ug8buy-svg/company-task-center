@@ -125,7 +125,7 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete }) {
                   borderRadius: 8, padding: '10px', marginBottom: 10,
                   textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--orange)',
                 }}>
-                  老闆需匯款 {fmtMoney(balance)}
+                  劉姐需匯款 {fmtMoney(balance)}
                 </div>
               )}
 
