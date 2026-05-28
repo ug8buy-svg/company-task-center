@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PinGate from './components/PinGate'
 import Home from './pages/Home'
 import Todos from './pages/Todos'
@@ -21,6 +21,7 @@ export default function App() {
         <Route path="/meetings" element={<Meetings />} />
         <Route path="/notifications" element={<PinGate><Notifications /></PinGate>} />
         <Route path="/staff-todos" element={<StaffTodos />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

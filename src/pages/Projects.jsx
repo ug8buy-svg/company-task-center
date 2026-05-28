@@ -192,6 +192,7 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
           onChange={e => setMilestoneInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAddMilestone()}
           placeholder="新增里程碑..."
+          maxLength={200}
           style={{
             width: '100%', padding: '6px 10px', fontSize: 13,
             border: '1px solid var(--border)', borderRadius: 8,
@@ -266,16 +267,16 @@ export default function Projects() {
       .insert({ name, status: '尚未開始' })
       .select()
       .single()
-    if (!error && data) {
-      setProjects(prev => [...prev, data])
-      setNewProjectName('')
-      setShowAddProject(false)
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setProjects(prev => [...prev, data])
+    setNewProjectName('')
+    setShowAddProject(false)
   }
 
   async function handleStatusChange(projectId, status) {
     const { error } = await supabase.from('projects').update({ status }).eq('id', projectId)
-    if (!error) setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status } : p))
+    if (error) { alert('操作失敗，請重試'); return }
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status } : p))
   }
 
   async function handleAddMilestone(projectId, content, existing) {
@@ -285,7 +286,8 @@ export default function Projects() {
       .insert({ project_id: projectId, content, is_done: false, sort_order: maxOrder + 1 })
       .select()
       .single()
-    if (!error && data) setMilestones(prev => [...prev, data])
+    if (error) { alert('操作失敗，請重試'); return }
+    setMilestones(prev => [...prev, data])
   }
 
   async function handleToggleMilestone(item) {
@@ -293,22 +295,23 @@ export default function Projects() {
       ? { is_done: false, done_at: null }
       : { is_done: true, done_at: new Date().toISOString() }
     const { error } = await supabase.from('milestones').update(update).eq('id', item.id)
-    if (!error) setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, ...update } : m))
+    if (error) { alert('操作失敗，請重試'); return }
+    setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, ...update } : m))
   }
 
   async function handleDeleteMilestone(item) {
     if (!window.confirm(`確定要刪除「${item.content}」嗎？`)) return
     const { error } = await supabase.from('milestones').delete().eq('id', item.id)
-    if (!error) setMilestones(prev => prev.filter(m => m.id !== item.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setMilestones(prev => prev.filter(m => m.id !== item.id))
   }
 
   async function handleDeleteProject(project) {
     if (!window.confirm(`確定要刪除「${project.name}」嗎？底下的里程碑也會一起刪除。`)) return
     const { error } = await supabase.from('projects').delete().eq('id', project.id)
-    if (!error) {
-      setProjects(prev => prev.filter(p => p.id !== project.id))
-      setMilestones(prev => prev.filter(m => m.project_id !== project.id))
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setProjects(prev => prev.filter(p => p.id !== project.id))
+    setMilestones(prev => prev.filter(m => m.project_id !== project.id))
   }
 
   return (
@@ -351,6 +354,7 @@ export default function Projects() {
               onChange={e => setNewProjectName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleAddProject(); if (e.key === 'Escape') setShowAddProject(false) }}
               placeholder="輸入專案名稱..."
+              maxLength={100}
               style={{
                 flex: 1, padding: '8px 12px', fontSize: 15,
                 border: '1px solid var(--border)', borderRadius: 8,

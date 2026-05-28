@@ -109,15 +109,14 @@ export default function Todos() {
       .select()
       .single()
 
-    if (!error && data) {
-      setTodos(prev => [data, ...prev])
-      setNewIds(prev => new Set([...prev, data.id]))
-      setTimeout(() => setNewIds(prev => {
-        const next = new Set(prev); next.delete(data.id); return next
-      }), 500)
-      setInput('')
-      setInputError(false)
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setTodos(prev => [data, ...prev])
+    setNewIds(prev => new Set([...prev, data.id]))
+    setTimeout(() => setNewIds(prev => {
+      const next = new Set(prev); next.delete(data.id); return next
+    }), 500)
+    setInput('')
+    setInputError(false)
   }
 
   async function toggleTodo(todo) {
@@ -130,7 +129,8 @@ export default function Todos() {
       .update(update)
       .eq('id', todo.id)
 
-    if (!error) setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, ...update } : t))
+    if (error) { alert('操作失敗，請重試'); return }
+    setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, ...update } : t))
   }
 
   async function deleteTodo(todo) {
@@ -141,7 +141,8 @@ export default function Todos() {
       .delete()
       .eq('id', todo.id)
 
-    if (!error) setTodos(prev => prev.filter(t => t.id !== todo.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setTodos(prev => prev.filter(t => t.id !== todo.id))
   }
 
   const undone = todos.filter(t => !t.is_done)
@@ -179,6 +180,7 @@ export default function Todos() {
               onChange={e => { setInput(e.target.value); setInputError(false) }}
               onKeyDown={e => e.key === 'Enter' && addTodo()}
               placeholder="輸入待辦事項..."
+              maxLength={200}
               style={{
                 width: '100%', padding: '10px 14px',
                 border: `2px solid ${inputError ? 'var(--red)' : 'var(--border)'}`,

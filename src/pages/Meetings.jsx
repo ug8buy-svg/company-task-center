@@ -195,15 +195,14 @@ export default function Meetings() {
       .insert({ title, meeting_date: newDate })
       .select()
       .single()
-    if (!error && data) {
-      setActiveMeeting(data)
-      setEntries([])
-      setPastMeetings(prev => activeMeeting ? [activeMeeting, ...prev] : prev)
-      setShowCreate(false)
-      setNewTitle('')
-      setNewDate(todayStr())
-      subscribeRealtime(data.id)
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setActiveMeeting(data)
+    setEntries([])
+    setPastMeetings(prev => activeMeeting ? [activeMeeting, ...prev] : prev)
+    setShowCreate(false)
+    setNewTitle('')
+    setNewDate(todayStr())
+    subscribeRealtime(data.id)
   }
 
   async function handleAddEntry() {
@@ -214,16 +213,16 @@ export default function Meetings() {
       .insert({ meeting_id: activeMeeting.id, content: text, created_by_name: speaker })
       .select()
       .single()
-    if (!error && data) {
-      setEntries(prev => [...prev, data])
-      setInput('')
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setEntries(prev => [...prev, data])
+    setInput('')
   }
 
   async function handleDeleteEntry(entry) {
     if (!window.confirm('確定要刪除這筆記錄嗎？')) return
     const { error } = await supabase.from('meeting_entries').delete().eq('id', entry.id)
-    if (!error) setEntries(prev => prev.filter(e => e.id !== entry.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setEntries(prev => prev.filter(e => e.id !== entry.id))
   }
 
   function handleSpeakerChange(s) {
@@ -299,6 +298,7 @@ export default function Meetings() {
                     onChange={e => setNewTitle(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleCreateMeeting()}
                     placeholder="會議名稱（例：5月旅展討論）"
+                    maxLength={100}
                     style={{
                       padding: '9px 12px', fontSize: 14,
                       border: '1px solid var(--border)', borderRadius: 8,
@@ -394,6 +394,7 @@ export default function Meetings() {
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddEntry() } }}
                     placeholder="輸入條目…（Shift+Enter 換行，Enter 送出）"
                     rows={3}
+                    maxLength={2000}
                     style={{
                       flex: 1, padding: '9px 12px', fontSize: 14, resize: 'vertical',
                       border: '1px solid var(--border)', borderRadius: 8,

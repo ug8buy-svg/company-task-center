@@ -86,15 +86,14 @@ export default function Notes() {
       .select()
       .single()
 
-    if (!error && data) {
-      setNotes(prev => [data, ...prev])
-      setNewIds(prev => new Set([...prev, data.id]))
-      setTimeout(() => setNewIds(prev => {
-        const next = new Set(prev); next.delete(data.id); return next
-      }), 500)
-      setInput('')
-      setInputError(false)
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setNotes(prev => [data, ...prev])
+    setNewIds(prev => new Set([...prev, data.id]))
+    setTimeout(() => setNewIds(prev => {
+      const next = new Set(prev); next.delete(data.id); return next
+    }), 500)
+    setInput('')
+    setInputError(false)
   }
 
   async function deleteNote(note) {
@@ -105,7 +104,8 @@ export default function Notes() {
       .delete()
       .eq('id', note.id)
 
-    if (!error) setNotes(prev => prev.filter(n => n.id !== note.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setNotes(prev => prev.filter(n => n.id !== note.id))
   }
 
   return (
@@ -138,6 +138,7 @@ export default function Notes() {
             onChange={e => { setInput(e.target.value); setInputError(false) }}
             placeholder="輸入備注內容…（Shift+Enter 換行）"
             rows={4}
+            maxLength={2000}
             style={{
               width: '100%',
               padding: '10px 14px',

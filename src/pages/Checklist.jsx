@@ -106,6 +106,7 @@ function ChecklistCard({ checklist, items, onAddItem, onToggle, onDelete, onRese
           onChange={e => setItemInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
           placeholder="新增品項..."
+          maxLength={200}
           style={{
             width: '100%', padding: '8px 12px', fontSize: 14,
             border: '1px solid var(--border)', borderRadius: 8,
@@ -175,11 +176,10 @@ export default function Checklist() {
       .insert({ title, is_archived: false })
       .select()
       .single()
-    if (!error && data) {
-      setChecklists(prev => [data, ...prev])
-      setNewTitle('')
-      setShowNewInput(false)
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setChecklists(prev => [data, ...prev])
+    setNewTitle('')
+    setShowNewInput(false)
   }
 
   async function handleAddItem(checklistId, content, items) {
@@ -189,7 +189,8 @@ export default function Checklist() {
       .insert({ checklist_id: checklistId, content, is_done: false, sort_order: maxOrder + 1 })
       .select()
       .single()
-    if (!error && data) setAllItems(prev => [...prev, data])
+    if (error) { alert('操作失敗，請重試'); return }
+    setAllItems(prev => [...prev, data])
   }
 
   async function handleToggleItem(item) {
@@ -197,13 +198,15 @@ export default function Checklist() {
       ? { is_done: false, done_at: null }
       : { is_done: true, done_at: new Date().toISOString() }
     const { error } = await supabase.from('checklist_items').update(update).eq('id', item.id)
-    if (!error) setAllItems(prev => prev.map(i => i.id === item.id ? { ...i, ...update } : i))
+    if (error) { alert('操作失敗，請重試'); return }
+    setAllItems(prev => prev.map(i => i.id === item.id ? { ...i, ...update } : i))
   }
 
   async function handleDeleteItem(item) {
     if (!window.confirm(`確定要刪除「${item.content}」嗎？`)) return
     const { error } = await supabase.from('checklist_items').delete().eq('id', item.id)
-    if (!error) setAllItems(prev => prev.filter(i => i.id !== item.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setAllItems(prev => prev.filter(i => i.id !== item.id))
   }
 
   async function handleReset(checklist) {
@@ -213,11 +216,10 @@ export default function Checklist() {
       .update({ is_done: false, done_at: null })
       .eq('checklist_id', checklist.id)
       .eq('is_done', true)
-    if (!error) {
-      setAllItems(prev => prev.map(i =>
-        i.checklist_id === checklist.id ? { ...i, is_done: false, done_at: null } : i
-      ))
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setAllItems(prev => prev.map(i =>
+      i.checklist_id === checklist.id ? { ...i, is_done: false, done_at: null } : i
+    ))
   }
 
   return (
@@ -266,6 +268,7 @@ export default function Checklist() {
                   onChange={e => setNewTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateChecklist(); if (e.key === 'Escape') setShowNewInput(false) }}
                   placeholder="輸入清單名稱（例：2026寵物展清點）"
+                  maxLength={100}
                   style={{
                     flex: 1, padding: '8px 12px', fontSize: 14,
                     border: '1px solid var(--border)', borderRadius: 8,

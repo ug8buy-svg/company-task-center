@@ -50,20 +50,20 @@ export default function Notifications() {
       .select()
       .single()
 
-    if (!error && data) {
-      setExhibitions(prev =>
-        [data, ...prev].sort((a, b) => b.event_date.localeCompare(a.event_date))
-      )
-      setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14 })
-      setShowForm(false)
-      setFormError('')
-    }
+    if (error) { alert('操作失敗，請重試'); return }
+    setExhibitions(prev =>
+      [data, ...prev].sort((a, b) => b.event_date.localeCompare(a.event_date))
+    )
+    setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14 })
+    setShowForm(false)
+    setFormError('')
   }
 
   async function handleDelete(ex) {
     if (!window.confirm(`確定要刪除「${ex.name}」嗎？`)) return
     const { error } = await supabase.from('exhibitions').delete().eq('id', ex.id)
-    if (!error) setExhibitions(prev => prev.filter(e => e.id !== ex.id))
+    if (error) { alert('操作失敗，請重試'); return }
+    setExhibitions(prev => prev.filter(e => e.id !== ex.id))
   }
 
   return (
@@ -105,6 +105,7 @@ export default function Notifications() {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="展覽名稱"
+                  maxLength={100}
                   style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--blue)'}
                   onBlur={e  => e.target.style.borderColor = 'var(--border)'}
