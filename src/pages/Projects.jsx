@@ -62,11 +62,14 @@ function MilestoneRow({ item, onToggle, onDelete }) {
 }
 
 // ── 專案卡片 ──
-function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onDeleteProject }) {
+function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onDeleteProject, onRenameProject }) {
+  const [isOpen, setIsOpen] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [milestoneInput, setMilestoneInput] = useState('')
-  const [delHover, setDelHover] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState(project.name)
   const statusMenuRef = useRef(null)
+  const nameInputRef = useRef(null)
 
   const done = milestones.filter(m => m.is_done)
   const undone = milestones.filter(m => !m.is_done)
@@ -86,6 +89,10 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
     return () => document.removeEventListener('mousedown', handler)
   }, [showStatusMenu])
 
+  useEffect(() => {
+    if (editingName && nameInputRef.current) nameInputRef.current.focus()
+  }, [editingName])
+
   function handleAddMilestone() {
     const text = milestoneInput.trim()
     if (!text) return
@@ -93,124 +100,193 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
     setMilestoneInput('')
   }
 
+  function handleNameSave() {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === project.name) {
+      setNameInput(project.name)
+    } else {
+      onRenameProject(project.id, trimmed)
+    }
+    setEditingName(false)
+  }
+
   return (
     <div style={{
       background: cardBg,
       border: '1px solid var(--border)',
       borderRadius: 16,
-      padding: '18px 18px 14px',
-      position: 'relative',
       opacity: isDone ? 0.85 : 1,
+      overflow: 'hidden',
     }}>
-      {/* 右上角刪除 */}
-      <button
-        onClick={() => onDeleteProject(project)}
-        onMouseEnter={() => setDelHover(true)}
-        onMouseLeave={() => setDelHover(false)}
+
+      {/* 標題列（點擊此列展開/收合） */}
+      <div
+        onClick={() => setIsOpen(v => !v)}
         style={{
-          position: 'absolute', top: 12, right: 12,
-          background: 'none', border: 'none', fontSize: 16,
-          color: delHover ? 'var(--red)' : 'var(--text-secondary)',
-          padding: '4px 6px', borderRadius: 6, lineHeight: 1,
-          cursor: 'pointer', transition: 'color 0.15s',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '14px 16px',
+          cursor: 'pointer',
+          userSelect: 'none',
         }}
-      >🗑️</button>
-
-      {/* 專案名稱 */}
-      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, paddingRight: 32 }}>
-        {project.name}
-      </div>
-
-      {/* 狀態標籤 */}
-      <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }} ref={statusMenuRef}>
-        <button
-          onClick={() => setShowStatusMenu(v => !v)}
-          style={{
-            background: STATUS_BG[project.status] || 'rgba(107,114,128,0.10)',
-            color: STATUS_COLOR[project.status] || 'var(--text-secondary)',
-            border: `1px solid ${STATUS_COLOR[project.status] || 'var(--text-secondary)'}`,
-            borderRadius: 20, padding: '3px 12px', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', transition: 'all 0.15s',
-          }}
-        >{project.status}</button>
-        {showStatusMenu && (
-          <div style={{
-            position: 'absolute', top: '110%', left: 0, zIndex: 20,
-            background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '4px 0', minWidth: 110,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          }}>
-            {STATUS_OPTIONS.map(s => (
-              <button
-                key={s}
-                onClick={() => { onStatusChange(project.id, s); setShowStatusMenu(false) }}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left',
-                  background: project.status === s ? STATUS_BG[s] : 'none',
-                  border: 'none', padding: '8px 14px', fontSize: 14,
-                  color: STATUS_COLOR[s] || 'var(--text-primary)',
-                  cursor: 'pointer', fontWeight: project.status === s ? 600 : 400,
-                }}
-              >{s}</button>
-            ))}
-          </div>
+      >
+        {/* 專案名稱 / 行內編輯 */}
+        {editingName ? (
+          <input
+            ref={nameInputRef}
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleNameSave()
+              if (e.key === 'Escape') { setNameInput(project.name); setEditingName(false) }
+            }}
+            onBlur={handleNameSave}
+            onClick={e => e.stopPropagation()}
+            maxLength={100}
+            style={{
+              flex: 1, fontSize: 16, fontWeight: 700,
+              border: '1px solid var(--blue)', borderRadius: 6,
+              padding: '2px 8px', background: 'var(--bg)',
+              color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit',
+            }}
+          />
+        ) : (
+          <span
+            style={{ flex: 1, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-all' }}
+            onClick={e => { e.stopPropagation(); setEditingName(true) }}
+          >{project.name}</span>
         )}
-      </div>
 
-      {/* 里程碑 */}
-      {total > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          {undone.map(m => (
-            <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
-          ))}
-          {done.map(m => (
-            <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
-          ))}
-        </div>
-      )}
-
-      {/* 進度條 */}
-      {total > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-            {doneCount} / {total} 完成
-          </div>
-          <div style={{ background: 'var(--border)', borderRadius: 99, height: 8, overflow: 'hidden' }}>
+        {/* 狀態標籤 */}
+        <div style={{ position: 'relative', flexShrink: 0 }} ref={statusMenuRef} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setShowStatusMenu(v => !v)}
+            style={{
+              background: STATUS_BG[project.status] || 'rgba(107,114,128,0.10)',
+              color: STATUS_COLOR[project.status] || 'var(--text-secondary)',
+              border: `1px solid ${STATUS_COLOR[project.status] || 'var(--text-secondary)'}`,
+              borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >{project.status}</button>
+          {showStatusMenu && (
             <div style={{
-              background: 'var(--blue)', height: '100%',
-              width: `${pct}%`, borderRadius: 99,
-              transition: 'width 0.3s ease',
-            }} />
+              position: 'absolute', top: '110%', left: 0, zIndex: 20,
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '4px 0', minWidth: 110,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            }}>
+              {STATUS_OPTIONS.map(s => (
+                <button
+                  key={s}
+                  onClick={() => { onStatusChange(project.id, s); setShowStatusMenu(false) }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: project.status === s ? STATUS_BG[s] : 'none',
+                    border: 'none', padding: '8px 14px', fontSize: 14,
+                    color: STATUS_COLOR[s] || 'var(--text-primary)',
+                    cursor: 'pointer', fontWeight: project.status === s ? 600 : 400,
+                  }}
+                >{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 進度摘要（有里程碑才顯示） */}
+        {total > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>
+            {doneCount}/{total}完成
+          </span>
+        )}
+
+        {/* 展開箭頭 */}
+        <span style={{
+          fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0,
+          display: 'inline-block',
+          transition: 'transform 0.2s ease',
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+        }}>▼</span>
+
+        {/* 刪除按鈕 */}
+        <button
+          onClick={e => { e.stopPropagation(); onDeleteProject(project) }}
+          style={{
+            background: 'none', border: 'none', fontSize: 15,
+            color: 'var(--text-secondary)',
+            padding: '4px 4px', borderRadius: 6, lineHeight: 1,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >🗑️</button>
+      </div>
+
+      {/* 展開內容（grid-template-rows 動畫，0.2s） */}
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: isOpen ? '1fr' : '0fr',
+        transition: 'grid-template-rows 0.2s ease',
+      }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '0 16px 14px' }}>
+
+            {/* 里程碑清單 */}
+            {total > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                {undone.map(m => (
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
+                ))}
+                {done.map(m => (
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
+                ))}
+              </div>
+            )}
+
+            {/* 進度條 */}
+            {total > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {doneCount} / {total} 完成
+                </div>
+                <div style={{ background: 'var(--border)', borderRadius: 99, height: 8, overflow: 'hidden' }}>
+                  <div style={{
+                    background: 'var(--blue)', height: '100%',
+                    width: `${pct}%`, borderRadius: 99,
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* 新增里程碑 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              <input
+                value={milestoneInput}
+                onChange={e => setMilestoneInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddMilestone()}
+                placeholder="新增里程碑..."
+                maxLength={200}
+                style={{
+                  width: '100%', padding: '6px 10px', fontSize: 13,
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  background: 'var(--bg)', color: 'var(--text-primary)',
+                  outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              />
+              <button
+                onClick={handleAddMilestone}
+                style={{
+                  background: 'var(--blue)', color: '#fff', border: 'none',
+                  borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-end',
+                }}
+              >新增</button>
+            </div>
+
           </div>
         </div>
-      )}
-
-      {/* 新增里程碑 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-        <input
-          value={milestoneInput}
-          onChange={e => setMilestoneInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAddMilestone()}
-          placeholder="新增里程碑..."
-          maxLength={200}
-          style={{
-            width: '100%', padding: '6px 10px', fontSize: 13,
-            border: '1px solid var(--border)', borderRadius: 8,
-            background: 'var(--bg)', color: 'var(--text-primary)',
-            outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-          }}
-          onFocus={e => e.target.style.borderColor = 'var(--blue)'}
-          onBlur={e => e.target.style.borderColor = 'var(--border)'}
-        />
-        <button
-          onClick={handleAddMilestone}
-          style={{
-            background: 'var(--blue)', color: '#fff', border: 'none',
-            borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-end',
-          }}
-        >新增</button>
       </div>
+
     </div>
   )
 }
@@ -277,6 +353,12 @@ export default function Projects() {
     const { error } = await supabase.from('projects').update({ status }).eq('id', projectId)
     if (error) { alert('操作失敗，請重試'); return }
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status } : p))
+  }
+
+  async function handleRenameProject(projectId, name) {
+    const { error } = await supabase.from('projects').update({ name }).eq('id', projectId)
+    if (error) { alert('操作失敗，請重試'); return }
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p))
   }
 
   async function handleAddMilestone(projectId, content, existing) {
@@ -400,6 +482,7 @@ export default function Projects() {
                 onToggleMilestone={handleToggleMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
                 onDeleteProject={handleDeleteProject}
+                onRenameProject={handleRenameProject}
               />
             ))}
           </div>
