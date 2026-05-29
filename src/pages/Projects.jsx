@@ -23,8 +23,26 @@ const STATUS_BG = {
 const SEED_PROJECTS = ['春旅店官網', '凱鑫旅店官網', '牠喜歡官網', '團購+1開發']
 
 // ── 里程碑列 ──
-function MilestoneRow({ item, onToggle, onDelete }) {
+function MilestoneRow({ item, onToggle, onDelete, onRename }) {
   const [hover, setHover] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [input, setInput] = useState(item.content)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus()
+  }, [editing])
+
+  function handleSave() {
+    const trimmed = input.trim()
+    if (trimmed && trimmed !== item.content) {
+      onRename(item, trimmed)
+    } else {
+      setInput(item.content)
+    }
+    setEditing(false)
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
       <div
@@ -41,12 +59,35 @@ function MilestoneRow({ item, onToggle, onDelete }) {
           {item.is_done && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
         </div>
       </div>
-      <span style={{
-        flex: 1, fontSize: 14,
-        color: item.is_done ? 'var(--text-secondary)' : 'var(--text-primary)',
-        textDecoration: item.is_done ? 'line-through' : 'none',
-        wordBreak: 'break-all',
-      }}>{item.content}</span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') handleSave()
+            if (e.key === 'Escape') { setInput(item.content); setEditing(false) }
+          }}
+          onBlur={handleSave}
+          maxLength={200}
+          style={{
+            flex: 1, fontSize: 14,
+            border: '1px solid var(--blue)', borderRadius: 6,
+            padding: '2px 8px', background: 'var(--bg)',
+            color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit',
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => setEditing(true)}
+          style={{
+            flex: 1, fontSize: 14,
+            color: item.is_done ? 'var(--text-secondary)' : 'var(--text-primary)',
+            textDecoration: item.is_done ? 'line-through' : 'none',
+            wordBreak: 'break-all', cursor: 'text',
+          }}
+        >{item.content}</span>
+      )}
       <button
         onClick={() => onDelete(item)}
         onMouseEnter={() => setHover(true)}
@@ -62,7 +103,7 @@ function MilestoneRow({ item, onToggle, onDelete }) {
 }
 
 // ── 專案卡片 ──
-function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onDeleteProject, onRenameProject }) {
+function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onRenameMilestone, onDeleteProject, onRenameProject }) {
   const [isOpen, setIsOpen] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [milestoneInput, setMilestoneInput] = useState('')
@@ -232,10 +273,10 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
             {total > 0 && (
               <div style={{ marginBottom: 12 }}>
                 {undone.map(m => (
-                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
                 ))}
                 {done.map(m => (
-                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} />
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
                 ))}
               </div>
             )}
@@ -381,6 +422,12 @@ export default function Projects() {
     setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, ...update } : m))
   }
 
+  async function handleRenameMilestone(item, content) {
+    const { error } = await supabase.from('milestones').update({ content }).eq('id', item.id)
+    if (error) { alert('操作失敗，請重試'); return }
+    setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, content } : m))
+  }
+
   async function handleDeleteMilestone(item) {
     if (!window.confirm(`確定要刪除「${item.content}」嗎？`)) return
     const { error } = await supabase.from('milestones').delete().eq('id', item.id)
@@ -481,6 +528,7 @@ export default function Projects() {
                 onAddMilestone={handleAddMilestone}
                 onToggleMilestone={handleToggleMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
+                onRenameMilestone={handleRenameMilestone}
                 onDeleteProject={handleDeleteProject}
                 onRenameProject={handleRenameProject}
               />
