@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   DndContext,
-  MouseSensor,
-  TouchSensor,
+  PointerSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -129,8 +128,13 @@ function SortableMilestoneRow({ item, onToggle, onDelete, onRename }) {
       style={{
         color: 'var(--text-secondary)',
         cursor: isDragging ? 'grabbing' : 'grab',
-        fontSize: 16, padding: '2px 0',
-        flexShrink: 0, touchAction: 'none', userSelect: 'none', lineHeight: 1,
+        fontSize: 16, padding: '8px',
+        flexShrink: 0,
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+        lineHeight: 1,
       }}
     >⠿</div>
   )
@@ -162,8 +166,7 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
   const nameInputRef = useRef(null)
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
   const done = milestones.filter(m => m.is_done)
