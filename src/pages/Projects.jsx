@@ -1,6 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const STATUS_OPTIONS = ['進行中', '等待中', '卡關', '尚未開始', '已完成']
 
@@ -23,7 +38,7 @@ const STATUS_BG = {
 const SEED_PROJECTS = ['春旅店官網', '凱鑫旅店官網', '牠喜歡官網', '團購+1開發']
 
 // ── 里程碑列 ──
-function MilestoneRow({ item, onToggle, onDelete, onRename }) {
+function MilestoneRow({ item, onToggle, onDelete, onRename, dragHandle }) {
   const [hover, setHover] = useState(false)
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState(item.content)
@@ -45,6 +60,7 @@ function MilestoneRow({ item, onToggle, onDelete, onRename }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+      {dragHandle}
       <div
         onClick={() => onToggle(item)}
         style={{ padding: 10, margin: -10, flexShrink: 0, cursor: 'pointer' }}
@@ -102,8 +118,41 @@ function MilestoneRow({ item, onToggle, onDelete, onRename }) {
   )
 }
 
+// ── 可排序里程碑列（未完成才套用） ──
+function SortableMilestoneRow({ item, onToggle, onDelete, onRename }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+
+  const dragHandle = (
+    <div
+      {...attributes}
+      {...listeners}
+      style={{
+        color: 'var(--text-secondary)',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        fontSize: 16, padding: '2px 0',
+        flexShrink: 0, touchAction: 'none', userSelect: 'none', lineHeight: 1,
+      }}
+    >⠿</div>
+  )
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: [CSS.Transform.toString(transform), isDragging ? 'scale(1.02)' : ''].filter(Boolean).join(' '),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 1 : 'auto',
+      }}
+    >
+      <MilestoneRow item={item} onToggle={onToggle} onDelete={onDelete} onRename={onRename} dragHandle={dragHandle} />
+    </div>
+  )
+}
+
 // ── 專案卡片 ──
-function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onRenameMilestone, onDeleteProject, onRenameProject }) {
+function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onRenameMilestone, onReorderMilestones, onDeleteProject, onRenameProject }) {
   const [isOpen, setIsOpen] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [milestoneInput, setMilestoneInput] = useState('')
@@ -111,6 +160,11 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
   const [nameInput, setNameInput] = useState(project.name)
   const statusMenuRef = useRef(null)
   const nameInputRef = useRef(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  )
 
   const done = milestones.filter(m => m.is_done)
   const undone = milestones.filter(m => !m.is_done)
@@ -150,6 +204,17 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
     }
     setEditingName(false)
   }
+
+  function handleDragEnd({ active, over }) {
+    if (!over || active.id === over.id) return
+    const oldIndex = undone.findIndex(m => m.id === active.id)
+    const newIndex = undone.findIndex(m => m.id === over.id)
+    const reordered = arrayMove(undone, oldIndex, newIndex)
+    onReorderMilestones(project.id, reordered, done)
+  }
+
+  // 已完成里程碑的佔位 handle，讓左側對齊
+  const doneHandle = <div style={{ width: 16, flexShrink: 0 }} />
 
   return (
     <div style={{
@@ -272,11 +337,15 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
             {/* 里程碑清單 */}
             {total > 0 && (
               <div style={{ marginBottom: 12 }}>
-                {undone.map(m => (
-                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
-                ))}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={undone.map(m => m.id)} strategy={verticalListSortingStrategy}>
+                    {undone.map(m => (
+                      <SortableMilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
+                    ))}
+                  </SortableContext>
+                </DndContext>
                 {done.map(m => (
-                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} dragHandle={doneHandle} />
                 ))}
               </div>
             )}
@@ -428,6 +497,24 @@ export default function Projects() {
     setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, content } : m))
   }
 
+  async function handleReorderMilestones(projectId, reorderedUndone, doneMilestones) {
+    const allUpdated = [
+      ...reorderedUndone.map((m, i) => ({ ...m, sort_order: i + 1 })),
+      ...doneMilestones.map((m, i) => ({ ...m, sort_order: reorderedUndone.length + i + 1 })),
+    ]
+    // 立即更新畫面
+    setMilestones(prev => [
+      ...prev.filter(m => m.project_id !== projectId),
+      ...allUpdated,
+    ])
+    // 批次更新 Supabase
+    await Promise.all(
+      allUpdated.map(m =>
+        supabase.from('milestones').update({ sort_order: m.sort_order }).eq('id', m.id)
+      )
+    )
+  }
+
   async function handleDeleteMilestone(item) {
     if (!window.confirm(`確定要刪除「${item.content}」嗎？`)) return
     const { error } = await supabase.from('milestones').delete().eq('id', item.id)
@@ -529,6 +616,7 @@ export default function Projects() {
                 onToggleMilestone={handleToggleMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
                 onRenameMilestone={handleRenameMilestone}
+                onReorderMilestones={handleReorderMilestones}
                 onDeleteProject={handleDeleteProject}
                 onRenameProject={handleRenameProject}
               />
