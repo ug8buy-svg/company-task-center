@@ -1,20 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 
 const STATUS_OPTIONS = ['進行中', '等待中', '卡關', '尚未開始', '已完成']
 
@@ -37,7 +23,7 @@ const STATUS_BG = {
 const SEED_PROJECTS = ['春旅店官網', '凱鑫旅店官網', '牠喜歡官網', '團購+1開發']
 
 // ── 里程碑列 ──
-function MilestoneRow({ item, onToggle, onDelete, onRename, dragHandle }) {
+function MilestoneRow({ item, onToggle, onDelete, onRename }) {
   const [hover, setHover] = useState(false)
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState(item.content)
@@ -59,7 +45,6 @@ function MilestoneRow({ item, onToggle, onDelete, onRename, dragHandle }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-      {dragHandle}
       <div
         onClick={() => onToggle(item)}
         style={{ padding: 10, margin: -10, flexShrink: 0, cursor: 'pointer' }}
@@ -117,46 +102,12 @@ function MilestoneRow({ item, onToggle, onDelete, onRename, dragHandle }) {
   )
 }
 
-// ── 可排序里程碑列（未完成才套用） ──
-function SortableMilestoneRow({ item, onToggle, onDelete, onRename }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
-
-  const dragHandle = (
-    <div
-      {...attributes}
-      {...listeners}
-      style={{
-        color: 'var(--text-secondary)',
-        cursor: isDragging ? 'grabbing' : 'grab',
-        fontSize: 16, padding: '8px',
-        flexShrink: 0,
-        touchAction: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
-        lineHeight: 1,
-      }}
-    >⠿</div>
-  )
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: [CSS.Transform.toString(transform), isDragging ? 'scale(1.02)' : ''].filter(Boolean).join(' '),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        position: 'relative',
-        zIndex: isDragging ? 1 : 'auto',
-      }}
-    >
-      <MilestoneRow item={item} onToggle={onToggle} onDelete={onDelete} onRename={onRename} dragHandle={dragHandle} />
-    </div>
-  )
-}
-
 // ── 專案卡片 ──
-function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onRenameMilestone, onReorderMilestones, onDeleteProject, onRenameProject }) {
+function ProjectCard({
+  project, milestones,
+  onStatusChange, onAddMilestone, onToggleMilestone, onDeleteMilestone, onRenameMilestone, onDeleteProject, onRenameProject,
+  isSorting, isFirst, isLast, onMoveUp, onMoveDown,
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [milestoneInput, setMilestoneInput] = useState('')
@@ -164,10 +115,6 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
   const [nameInput, setNameInput] = useState(project.name)
   const statusMenuRef = useRef(null)
   const nameInputRef = useRef(null)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  )
 
   const done = milestones.filter(m => m.is_done)
   const undone = milestones.filter(m => !m.is_done)
@@ -208,17 +155,6 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
     setEditingName(false)
   }
 
-  function handleDragEnd({ active, over }) {
-    if (!over || active.id === over.id) return
-    const oldIndex = undone.findIndex(m => m.id === active.id)
-    const newIndex = undone.findIndex(m => m.id === over.id)
-    const reordered = arrayMove(undone, oldIndex, newIndex)
-    onReorderMilestones(project.id, reordered, done)
-  }
-
-  // 已完成里程碑的佔位 handle，讓左側對齊
-  const doneHandle = <div style={{ width: 16, flexShrink: 0 }} />
-
   return (
     <div style={{
       background: cardBg,
@@ -228,16 +164,45 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
       overflow: 'hidden',
     }}>
 
-      {/* 標題列（點擊此列展開/收合） */}
+      {/* 標題列 */}
       <div
-        onClick={() => setIsOpen(v => !v)}
+        onClick={() => !isSorting && setIsOpen(v => !v)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '14px 16px',
-          cursor: 'pointer',
+          cursor: isSorting ? 'default' : 'pointer',
           userSelect: 'none',
         }}
       >
+        {/* 排序模式：↑↓ 按鈕 */}
+        {isSorting && (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}
+          >
+            <button
+              onClick={onMoveUp}
+              disabled={isFirst}
+              style={{
+                background: 'none', border: 'none', lineHeight: 1,
+                fontSize: 15, padding: '2px 6px', borderRadius: 4,
+                color: isFirst ? 'var(--border)' : 'var(--text-primary)',
+                cursor: isFirst ? 'default' : 'pointer',
+              }}
+            >↑</button>
+            <button
+              onClick={onMoveDown}
+              disabled={isLast}
+              style={{
+                background: 'none', border: 'none', lineHeight: 1,
+                fontSize: 15, padding: '2px 6px', borderRadius: 4,
+                color: isLast ? 'var(--border)' : 'var(--text-primary)',
+                cursor: isLast ? 'default' : 'pointer',
+              }}
+            >↓</button>
+          </div>
+        )}
+
         {/* 專案名稱 / 行內編輯 */}
         {editingName ? (
           <input
@@ -261,20 +226,20 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
         ) : (
           <span
             style={{ flex: 1, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-all' }}
-            onClick={e => { e.stopPropagation(); setEditingName(true) }}
+            onClick={e => { if (!isSorting) { e.stopPropagation(); setEditingName(true) } }}
           >{project.name}</span>
         )}
 
         {/* 狀態標籤 */}
         <div style={{ position: 'relative', flexShrink: 0 }} ref={statusMenuRef} onClick={e => e.stopPropagation()}>
           <button
-            onClick={() => setShowStatusMenu(v => !v)}
+            onClick={() => !isSorting && setShowStatusMenu(v => !v)}
             style={{
               background: STATUS_BG[project.status] || 'rgba(107,114,128,0.10)',
               color: STATUS_COLOR[project.status] || 'var(--text-secondary)',
               border: `1px solid ${STATUS_COLOR[project.status] || 'var(--text-secondary)'}`,
               borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isSorting ? 'default' : 'pointer',
             }}
           >{project.status}</button>
           {showStatusMenu && (
@@ -301,37 +266,41 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
           )}
         </div>
 
-        {/* 進度摘要（有里程碑才顯示） */}
+        {/* 進度摘要 */}
         {total > 0 && (
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>
             {doneCount}/{total}完成
           </span>
         )}
 
-        {/* 展開箭頭 */}
-        <span style={{
-          fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0,
-          display: 'inline-block',
-          transition: 'transform 0.2s ease',
-          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-        }}>▼</span>
+        {/* 展開箭頭（排序模式隱藏） */}
+        {!isSorting && (
+          <span style={{
+            fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0,
+            display: 'inline-block',
+            transition: 'transform 0.2s ease',
+            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}>▼</span>
+        )}
 
-        {/* 刪除按鈕 */}
-        <button
-          onClick={e => { e.stopPropagation(); onDeleteProject(project) }}
-          style={{
-            background: 'none', border: 'none', fontSize: 15,
-            color: 'var(--text-secondary)',
-            padding: '4px 4px', borderRadius: 6, lineHeight: 1,
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >🗑️</button>
+        {/* 刪除按鈕（排序模式隱藏） */}
+        {!isSorting && (
+          <button
+            onClick={e => { e.stopPropagation(); onDeleteProject(project) }}
+            style={{
+              background: 'none', border: 'none', fontSize: 15,
+              color: 'var(--text-secondary)',
+              padding: '4px 4px', borderRadius: 6, lineHeight: 1,
+              cursor: 'pointer', flexShrink: 0,
+            }}
+          >🗑️</button>
+        )}
       </div>
 
-      {/* 展開內容（grid-template-rows 動畫，0.2s） */}
+      {/* 展開內容（排序模式強制收合） */}
       <div style={{
         display: 'grid',
-        gridTemplateRows: isOpen ? '1fr' : '0fr',
+        gridTemplateRows: (!isSorting && isOpen) ? '1fr' : '0fr',
         transition: 'grid-template-rows 0.2s ease',
       }}>
         <div style={{ overflow: 'hidden' }}>
@@ -340,15 +309,11 @@ function ProjectCard({ project, milestones, onStatusChange, onAddMilestone, onTo
             {/* 里程碑清單 */}
             {total > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={undone.map(m => m.id)} strategy={verticalListSortingStrategy}>
-                    {undone.map(m => (
-                      <SortableMilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
-                    ))}
-                  </SortableContext>
-                </DndContext>
+                {undone.map(m => (
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
+                ))}
                 {done.map(m => (
-                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} dragHandle={doneHandle} />
+                  <MilestoneRow key={m.id} item={m} onToggle={onToggleMilestone} onDelete={onDeleteMilestone} onRename={onRenameMilestone} />
                 ))}
               </div>
             )}
@@ -410,6 +375,7 @@ export default function Projects() {
   const [projects,   setProjects]   = useState([])
   const [milestones, setMilestones] = useState([])
   const [loading,    setLoading]    = useState(true)
+  const [isSorting,  setIsSorting]  = useState(false)
   const [showAddProject, setShowAddProject] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const addInputRef = useRef(null)
@@ -422,11 +388,11 @@ export default function Projects() {
 
   async function init() {
     setLoading(true)
-    const { data: pData } = await supabase.from('projects').select('*').order('created_at', { ascending: true })
+    const { data: pData } = await supabase.from('projects').select('*').order('sort_order', { ascending: true })
     const projects = pData ?? []
 
     if (projects.length === 0) {
-      const seeds = SEED_PROJECTS.map(name => ({ name, status: '尚未開始' }))
+      const seeds = SEED_PROJECTS.map((name, i) => ({ name, status: '尚未開始', sort_order: i + 1 }))
       const { data: inserted } = await supabase.from('projects').insert(seeds).select()
       setProjects(inserted ?? [])
     } else {
@@ -439,21 +405,44 @@ export default function Projects() {
   }
 
   function sortedProjects() {
-    const active = projects.filter(p => p.status !== '已完成')
-    const done   = projects.filter(p => p.status === '已完成')
-    return [...active, ...done]
+    return [...projects].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   }
 
   function milestonesFor(projectId) {
     return milestones.filter(m => m.project_id === projectId)
   }
 
+  function handleMoveProject(projectId, direction) {
+    const list = sortedProjects()
+    const idx = list.findIndex(p => p.id === projectId)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= list.length) return
+
+    const newList = [...list]
+    ;[newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]]
+
+    setProjects(prev => prev.map(p => {
+      const newPos = newList.findIndex(n => n.id === p.id)
+      return { ...p, sort_order: newPos + 1 }
+    }))
+  }
+
+  async function handleSortingDone() {
+    setIsSorting(false)
+    await Promise.all(
+      projects.map(p =>
+        supabase.from('projects').update({ sort_order: p.sort_order }).eq('id', p.id)
+      )
+    )
+  }
+
   async function handleAddProject() {
     const name = newProjectName.trim()
     if (!name) return
+    const maxOrder = projects.length > 0 ? Math.max(...projects.map(p => p.sort_order ?? 0)) : 0
     const { data, error } = await supabase
       .from('projects')
-      .insert({ name, status: '尚未開始' })
+      .insert({ name, status: '尚未開始', sort_order: maxOrder + 1 })
       .select()
       .single()
     if (error) { alert('操作失敗，請重試'); return }
@@ -500,24 +489,6 @@ export default function Projects() {
     setMilestones(prev => prev.map(m => m.id === item.id ? { ...m, content } : m))
   }
 
-  async function handleReorderMilestones(projectId, reorderedUndone, doneMilestones) {
-    const allUpdated = [
-      ...reorderedUndone.map((m, i) => ({ ...m, sort_order: i + 1 })),
-      ...doneMilestones.map((m, i) => ({ ...m, sort_order: reorderedUndone.length + i + 1 })),
-    ]
-    // 立即更新畫面
-    setMilestones(prev => [
-      ...prev.filter(m => m.project_id !== projectId),
-      ...allUpdated,
-    ])
-    // 批次更新 Supabase
-    await Promise.all(
-      allUpdated.map(m =>
-        supabase.from('milestones').update({ sort_order: m.sort_order }).eq('id', m.id)
-      )
-    )
-  }
-
   async function handleDeleteMilestone(item) {
     if (!window.confirm(`確定要刪除「${item.content}」嗎？`)) return
     const { error } = await supabase.from('milestones').delete().eq('id', item.id)
@@ -533,6 +504,8 @@ export default function Projects() {
     setMilestones(prev => prev.filter(m => m.project_id !== project.id))
   }
 
+  const list = sortedProjects()
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
@@ -540,7 +513,7 @@ export default function Projects() {
       <header style={{
         background: 'var(--card)', borderBottom: '1px solid var(--border)',
         height: 56, padding: '0 20px',
-        display: 'flex', alignItems: 'center', gap: 12,
+        display: 'flex', alignItems: 'center', gap: 8,
         position: 'sticky', top: 0, zIndex: 10,
       }}>
         <button
@@ -548,20 +521,43 @@ export default function Projects() {
           style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-secondary)', padding: '4px 8px', borderRadius: 8, lineHeight: 1, cursor: 'pointer' }}
         >←</button>
         <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>專案進度看板</span>
-        <button
-          onClick={() => setShowAddProject(v => !v)}
-          style={{
-            background: 'var(--blue)', color: '#fff', border: 'none',
-            borderRadius: 10, padding: '7px 14px', fontSize: 14, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >＋ 新增專案</button>
+
+        {isSorting ? (
+          <button
+            onClick={handleSortingDone}
+            style={{
+              background: 'var(--green)', color: '#fff', border: 'none',
+              borderRadius: 10, padding: '7px 16px', fontSize: 14, fontWeight: 600,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >完成</button>
+        ) : (
+          <>
+            <button
+              onClick={() => setIsSorting(true)}
+              style={{
+                background: 'none', color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 10, padding: '6px 12px', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >排序</button>
+            <button
+              onClick={() => setShowAddProject(v => !v)}
+              style={{
+                background: 'var(--blue)', color: '#fff', border: 'none',
+                borderRadius: 10, padding: '7px 14px', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >＋ 新增專案</button>
+          </>
+        )}
       </header>
 
       <main style={{ padding: '20px 16px', maxWidth: 680, margin: '0 auto' }}>
 
         {/* 新增專案輸入框 */}
-        {showAddProject && (
+        {showAddProject && !isSorting && (
           <div className="slide-in-top" style={{
             background: 'var(--card)', border: '1px solid var(--border)',
             borderRadius: 14, padding: 16, marginBottom: 20,
@@ -609,7 +605,7 @@ export default function Projects() {
         {/* 專案卡片 */}
         {!loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {sortedProjects().map(project => (
+            {list.map((project, idx) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -619,9 +615,13 @@ export default function Projects() {
                 onToggleMilestone={handleToggleMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
                 onRenameMilestone={handleRenameMilestone}
-                onReorderMilestones={handleReorderMilestones}
                 onDeleteProject={handleDeleteProject}
                 onRenameProject={handleRenameProject}
+                isSorting={isSorting}
+                isFirst={idx === 0}
+                isLast={idx === list.length - 1}
+                onMoveUp={() => handleMoveProject(project.id, 'up')}
+                onMoveDown={() => handleMoveProject(project.id, 'down')}
               />
             ))}
           </div>
