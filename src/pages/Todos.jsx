@@ -8,7 +8,7 @@ function formatTime(isoStr) {
 }
 
 // ── 單筆待辦項目 ──
-function TodoItem({ todo, isNew, onToggle, onDelete }) {
+function TodoItem({ todo, isNew, onToggle, onDelete, onNotify }) {
   const [delHover, setDelHover] = useState(false)
 
   return (
@@ -60,6 +60,19 @@ function TodoItem({ todo, isNew, onToggle, onDelete }) {
         </div>
       </div>
 
+      {/* LINE 通知按鈕（只有未完成才顯示） */}
+      {!todo.is_done && (
+        <button
+          onClick={() => onNotify(todo)}
+          style={{
+            background: '#06C755', color: '#fff',
+            border: 'none', borderRadius: 6,
+            padding: '5px 9px', fontSize: 12, fontWeight: 700,
+            cursor: 'pointer', flexShrink: 0, lineHeight: 1.4,
+          }}
+        >LINE</button>
+      )}
+
       {/* 刪除按鈕 */}
       <button
         onClick={() => onDelete(todo)}
@@ -81,13 +94,18 @@ function TodoItem({ todo, isNew, onToggle, onDelete }) {
 // ── 主頁面 ──
 export default function Todos() {
   const navigate = useNavigate()
-  const [todos,   setTodos]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [input,   setInput]   = useState('')
+  const [todos,      setTodos]     = useState([])
+  const [loading,    setLoading]   = useState(true)
+  const [input,      setInput]     = useState('')
   const [inputError, setInputError] = useState(false)
-  const [newIds,  setNewIds]  = useState(new Set())
+  const [newIds,     setNewIds]    = useState(new Set())
+  const [bossLineId, setBossLineId] = useState(null)
+  const [toast,      setToast]     = useState(null) // 'success' | 'error' | null
 
-  useEffect(() => { fetchTodos() }, [])
+  useEffect(() => {
+    fetchTodos()
+    fetchBossLineId()
+  }, [])
 
   async function fetchTodos() {
     setLoading(true)
@@ -97,6 +115,39 @@ export default function Todos() {
       .order('created_at', { ascending: true })
     if (!error) setTodos(data ?? [])
     setLoading(false)
+  }
+
+  async function fetchBossLineId() {
+    const { data } = await supabase
+      .from('users')
+      .select('line_id')
+      .eq('role', 'boss')
+      .single()
+    if (data?.line_id) setBossLineId(data.line_id)
+  }
+
+  async function sendTodoNotification(todo) {
+    if (!bossLineId) { alert('無法取得通知設定，請稍後再試'); return }
+    if (!window.confirm(`確定要發送 LINE 通知給劉姐嗎？\n內容：${todo.content}`)) return
+
+    const message = `📌 待辦提醒\n\n${todo.content}\n\n請儘速確認並完成此項目。\n— 公司任務中心`
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-line-notification`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ line_id: bossLineId, message }),
+        }
+      )
+      setToast(res.ok ? 'success' : 'error')
+    } catch {
+      setToast('error')
+    }
+    setTimeout(() => setToast(null), 1500)
   }
 
   async function addTodo() {
@@ -150,6 +201,20 @@ export default function Todos() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+
+      {/* Toast 提示 */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 68, left: '50%', transform: 'translateX(-50%)',
+          background: toast === 'success' ? '#06C755' : 'var(--red)',
+          color: '#fff', padding: '8px 20px', borderRadius: 20,
+          fontSize: 14, fontWeight: 600, zIndex: 100,
+          whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+          pointerEvents: 'none',
+        }}>
+          {toast === 'success' ? '✅ 通知已發送' : '❌ 發送失敗，請重試'}
+        </div>
+      )}
 
       {/* 頂部標題列 */}
       <header style={{
@@ -221,7 +286,10 @@ export default function Todos() {
         {!loading && undone.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
             {undone.map(todo => (
-              <TodoItem key={todo.id} todo={todo} isNew={newIds.has(todo.id)} onToggle={toggleTodo} onDelete={deleteTodo} />
+              <TodoItem
+                key={todo.id} todo={todo} isNew={newIds.has(todo.id)}
+                onToggle={toggleTodo} onDelete={deleteTodo} onNotify={sendTodoNotification}
+              />
             ))}
           </div>
         )}
@@ -234,7 +302,10 @@ export default function Todos() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {done.map(todo => (
-                <TodoItem key={todo.id} todo={todo} isNew={false} onToggle={toggleTodo} onDelete={deleteTodo} />
+                <TodoItem
+                  key={todo.id} todo={todo} isNew={false}
+                  onToggle={toggleTodo} onDelete={deleteTodo} onNotify={sendTodoNotification}
+                />
               ))}
             </div>
           </div>

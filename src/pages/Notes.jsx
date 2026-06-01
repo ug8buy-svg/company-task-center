@@ -7,7 +7,7 @@ function formatTime(isoStr) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function NoteCard({ note, isNew, onDelete }) {
+function NoteCard({ note, isNew, onDelete, onNotify }) {
   const [delHover, setDelHover] = useState(false)
 
   return (
@@ -18,27 +18,38 @@ function NoteCard({ note, isNew, onDelete }) {
         border: '1px solid var(--border)',
         borderRadius: 12,
         padding: '14px 16px',
-        position: 'relative',
       }}
     >
-      {/* 右上角刪除按鈕 */}
-      <button
-        onClick={() => onDelete(note)}
-        onMouseEnter={() => setDelHover(true)}
-        onMouseLeave={() => setDelHover(false)}
-        style={{
-          position: 'absolute', top: 4, right: 4,
-          background: 'none', border: 'none',
-          fontSize: 16,
-          color: delHover ? 'var(--red)' : 'var(--text-secondary)',
-          padding: 10, borderRadius: 6, lineHeight: 1,
-          transition: 'color 0.18s',
-        }}
-      >🗑️</button>
-
-      {/* 建立時間 */}
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        {formatTime(note.created_at)}
+      {/* 頂部列：建立時間 + 按鈕群 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {formatTime(note.created_at)}
+        </div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {/* LINE 通知按鈕 */}
+          <button
+            onClick={() => onNotify(note)}
+            style={{
+              background: '#06C755', color: '#fff',
+              border: 'none', borderRadius: 6,
+              padding: '4px 9px', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', lineHeight: 1.4,
+            }}
+          >LINE</button>
+          {/* 刪除按鈕 */}
+          <button
+            onClick={() => onDelete(note)}
+            onMouseEnter={() => setDelHover(true)}
+            onMouseLeave={() => setDelHover(false)}
+            style={{
+              background: 'none', border: 'none',
+              fontSize: 16,
+              color: delHover ? 'var(--red)' : 'var(--text-secondary)',
+              padding: '4px 6px', borderRadius: 6, lineHeight: 1,
+              transition: 'color 0.18s', cursor: 'pointer',
+            }}
+          >🗑️</button>
+        </div>
       </div>
 
       {/* 備注內容（white-space: pre-wrap 保留換行） */}
@@ -48,7 +59,6 @@ function NoteCard({ note, isNew, onDelete }) {
         lineHeight: 1.7,
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-all',
-        paddingRight: 28,
       }}>
         {note.content}
       </div>
@@ -58,13 +68,18 @@ function NoteCard({ note, isNew, onDelete }) {
 
 export default function Notes() {
   const navigate = useNavigate()
-  const [notes,   setNotes]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [input,   setInput]   = useState('')
+  const [notes,      setNotes]     = useState([])
+  const [loading,    setLoading]   = useState(true)
+  const [input,      setInput]     = useState('')
   const [inputError, setInputError] = useState(false)
-  const [newIds,  setNewIds]  = useState(new Set())
+  const [newIds,     setNewIds]    = useState(new Set())
+  const [bossLineId, setBossLineId] = useState(null)
+  const [toast,      setToast]     = useState(null) // 'success' | 'error' | null
 
-  useEffect(() => { fetchNotes() }, [])
+  useEffect(() => {
+    fetchNotes()
+    fetchBossLineId()
+  }, [])
 
   async function fetchNotes() {
     setLoading(true)
@@ -74,6 +89,40 @@ export default function Notes() {
       .order('created_at', { ascending: false })
     if (!error) setNotes(data ?? [])
     setLoading(false)
+  }
+
+  async function fetchBossLineId() {
+    const { data } = await supabase
+      .from('users')
+      .select('line_id')
+      .eq('role', 'boss')
+      .single()
+    if (data?.line_id) setBossLineId(data.line_id)
+  }
+
+  async function sendNoteNotification(note) {
+    if (!bossLineId) { alert('無法取得通知設定，請稍後再試'); return }
+    const preview = note.content.slice(0, 30) + (note.content.length > 30 ? '...' : '')
+    if (!window.confirm(`確定要發送 LINE 通知給劉姐嗎？\n內容：${preview}`)) return
+
+    const message = `📝 備注提醒\n\n${note.content}\n\n— 公司任務中心`
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-line-notification`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ line_id: bossLineId, message }),
+        }
+      )
+      setToast(res.ok ? 'success' : 'error')
+    } catch {
+      setToast('error')
+    }
+    setTimeout(() => setToast(null), 1500)
   }
 
   async function addNote() {
@@ -110,6 +159,20 @@ export default function Notes() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+
+      {/* Toast 提示 */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 68, left: '50%', transform: 'translateX(-50%)',
+          background: toast === 'success' ? '#06C755' : 'var(--red)',
+          color: '#fff', padding: '8px 20px', borderRadius: 20,
+          fontSize: 14, fontWeight: 600, zIndex: 100,
+          whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+          pointerEvents: 'none',
+        }}>
+          {toast === 'success' ? '✅ 通知已發送' : '❌ 發送失敗，請重試'}
+        </div>
+      )}
 
       {/* 頂部標題列 */}
       <header style={{
@@ -163,6 +226,7 @@ export default function Notes() {
                 background: 'var(--blue)', color: '#fff',
                 border: 'none', borderRadius: 10,
                 padding: '10px 24px', fontSize: 15, fontWeight: 600,
+                cursor: 'pointer',
               }}
             >新增</button>
           </div>
@@ -187,6 +251,7 @@ export default function Notes() {
                 note={note}
                 isNew={newIds.has(note.id)}
                 onDelete={deleteNote}
+                onNotify={sendNoteNotification}
               />
             ))}
           </div>
