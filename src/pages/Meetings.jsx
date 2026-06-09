@@ -30,37 +30,115 @@ function formatDate(isoStr) {
 }
 
 // ── 條目列 ──
-function EntryRow({ entry, onDelete }) {
+function EntryRow({ entry, onDelete, onEdit }) {
   const [delHover, setDelHover] = useState(false)
+  const [editing, setEditing]   = useState(false)
+  const [editInput, setEditInput] = useState(entry.content)
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      textareaRef.current.selectionStart = textareaRef.current.value.length
+    }
+  }, [editing])
+
+  function startEdit() {
+    setEditInput(entry.content)
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    const text = editInput.trim()
+    if (!text || text === entry.content) { setEditing(false); return }
+    await onEdit(entry, text)
+    setEditing(false)
+  }
+
+  function cancelEdit() {
+    setEditInput(entry.content)
+    setEditing(false)
+  }
+
   return (
     <div style={{
-      background: 'var(--card)', border: '1px solid var(--border)',
+      background: 'var(--card)', border: `1px solid ${editing ? 'var(--blue)' : 'var(--border)'}`,
       borderRadius: 10, padding: '10px 14px', marginBottom: 8,
       display: 'flex', gap: 12, alignItems: 'flex-start',
     }}>
-      <div style={{ flex: 1, fontSize: 15, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6 }}>
-        {entry.content}
-      </div>
-      <div style={{ flexShrink: 0, textAlign: 'right' }}>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
-          {entry.created_by_name}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-          {formatTime(entry.created_at)}
-        </div>
-        {onDelete && (
-          <button
-            onClick={() => onDelete(entry)}
-            onMouseEnter={() => setDelHover(true)}
-            onMouseLeave={() => setDelHover(false)}
-            style={{
-              background: 'none', border: 'none', padding: '2px 0',
-              fontSize: 14, color: delHover ? 'var(--red)' : 'var(--border)',
-              cursor: 'pointer', marginTop: 4, lineHeight: 1, transition: 'color 0.15s',
+      {editing ? (
+        <div style={{ flex: 1 }}>
+          <textarea
+            ref={textareaRef}
+            value={editInput}
+            onChange={e => setEditInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() }
+              if (e.key === 'Escape') cancelEdit()
             }}
-          >🗑️</button>
-        )}
-      </div>
+            rows={3}
+            maxLength={2000}
+            style={{
+              width: '100%', padding: '6px 10px', fontSize: 15,
+              border: '1px solid var(--blue)', borderRadius: 8,
+              background: 'var(--bg)', color: 'var(--text-primary)',
+              outline: 'none', fontFamily: 'inherit', lineHeight: 1.6,
+              resize: 'vertical', boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button
+              onClick={cancelEdit}
+              style={{
+                background: 'none', border: '1px solid var(--border)',
+                color: 'var(--text-secondary)', borderRadius: 6,
+                padding: '4px 12px', fontSize: 13, cursor: 'pointer',
+              }}
+            >取消</button>
+            <button
+              onClick={saveEdit}
+              style={{
+                background: 'var(--blue)', color: '#fff', border: 'none',
+                borderRadius: 6, padding: '4px 14px', fontSize: 13,
+                fontWeight: 600, cursor: 'pointer',
+              }}
+            >儲存</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div
+            onClick={onEdit ? startEdit : undefined}
+            style={{
+              flex: 1, fontSize: 15, color: 'var(--text-primary)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6,
+              cursor: onEdit ? 'text' : 'default',
+            }}
+          >
+            {entry.content}
+          </div>
+          <div style={{ flexShrink: 0, textAlign: 'right' }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {entry.created_by_name}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+              {formatTime(entry.created_at)}
+            </div>
+            {onDelete && (
+              <button
+                onClick={() => onDelete(entry)}
+                onMouseEnter={() => setDelHover(true)}
+                onMouseLeave={() => setDelHover(false)}
+                style={{
+                  background: 'none', border: 'none', padding: '2px 0',
+                  fontSize: 14, color: delHover ? 'var(--red)' : 'var(--border)',
+                  cursor: 'pointer', marginTop: 4, lineHeight: 1, transition: 'color 0.15s',
+                }}
+              >🗑️</button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -225,6 +303,15 @@ export default function Meetings() {
     setEntries(prev => prev.filter(e => e.id !== entry.id))
   }
 
+  async function handleEditEntry(entry, newContent) {
+    const { error } = await supabase
+      .from('meeting_entries')
+      .update({ content: newContent })
+      .eq('id', entry.id)
+    if (error) { alert('操作失敗，請重試'); return }
+    setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: newContent } : e))
+  }
+
   function handleSpeakerChange(s) {
     setSpeaker(s)
     localStorage.setItem(LS_SPEAKER, s)
@@ -363,7 +450,7 @@ export default function Meetings() {
                   {entries.length === 0 ? (
                     <p style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', padding: '16px 0' }}>會議開始，可以新增第一筆條目</p>
                   ) : (
-                    entries.map(e => <EntryRow key={e.id} entry={e} onDelete={handleDeleteEntry} />)
+                    entries.map(e => <EntryRow key={e.id} entry={e} onDelete={handleDeleteEntry} onEdit={handleEditEntry} />)
                   )}
                   <div ref={entriesEndRef} />
                 </div>
