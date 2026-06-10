@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const CATEGORIES = ['旅遊展', '寵物展']
+
 const inputStyle = {
   width: '100%', padding: '9px 12px', fontSize: 14,
   border: '1px solid var(--border)', borderRadius: 8,
@@ -17,12 +19,120 @@ function formatDateRange(ex) {
   return `${start.replace(/-/g, '/')} ～ ${end.replace(/-/g, '/')}（共${days}天）`
 }
 
+// ── 展覽卡片（樣式與功能不變）──
+function ExhibitionCard({ ex, onDelete }) {
+  return (
+    <div style={{
+      background: 'var(--bg)', border: '1px solid var(--border)',
+      borderRadius: 12, padding: '12px 14px', marginBottom: 8,
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+          {ex.name}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 2 }}>
+          {formatDateRange(ex)}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          提前 {ex.notify_days_before} 天通知
+        </div>
+      </div>
+      <button
+        onClick={() => onDelete(ex)}
+        style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
+      >🗑️</button>
+    </div>
+  )
+}
+
+// ── 年份區塊（最新年份預設展開）──
+function YearSection({ year, exList, isNewest, onDelete }) {
+  const [open, setOpen] = useState(isNewest)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          padding: '8px 4px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{open ? '▾' : '▸'}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          {year}年（{exList.length}場）
+        </span>
+      </button>
+      {open && (
+        <div style={{ paddingLeft: 4 }}>
+          {exList.map(ex => <ExhibitionCard key={ex.id} ex={ex} onDelete={onDelete} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 類型區塊（預設展開）──
+function CategorySection({ category, exList, onDelete }) {
+  const [open, setOpen] = useState(true)
+
+  // 依年份分組，由新到舊
+  const yearMap = {}
+  exList.forEach(ex => {
+    const yr = ex.event_date.slice(0, 4)
+    if (!yearMap[yr]) yearMap[yr] = []
+    yearMap[yr].push(ex)
+  })
+  const years = Object.keys(yearMap).sort((a, b) => b - a)
+  const newestYear = years[0]
+
+  return (
+    <div style={{
+      background: 'var(--card)', border: '1px solid var(--border)',
+      borderRadius: 14, marginBottom: 12, overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          padding: '14px 16px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 15, color: 'var(--text-secondary)' }}>{open ? '▾' : '▸'}</span>
+        <span style={{ flex: 1, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {category}
+        </span>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          {exList.length}場
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 16px 14px' }}>
+          {years.map(yr => (
+            <YearSection
+              key={yr}
+              year={yr}
+              exList={yearMap[yr]}
+              isNewest={yr === newestYear}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 主頁面 ──
 export default function Notifications() {
   const navigate = useNavigate()
   const [exhibitions, setExhibitions] = useState([])
   const [loading,     setLoading]     = useState(true)
   const [showForm,    setShowForm]    = useState(false)
-  const [form, setForm] = useState({ name: '', event_date: '', end_date: '', notify_days_before: 14 })
+  // 補漏：category 加入 form 初始狀態
+  const [form, setForm] = useState({ name: '', event_date: '', end_date: '', notify_days_before: 14, category: '旅遊展' })
   const [formError, setFormError] = useState('')
 
   useEffect(() => { fetchAll() }, [])
@@ -46,6 +156,7 @@ export default function Notifications() {
         event_date: form.event_date,
         end_date: form.end_date || null,
         notify_days_before: Number(form.notify_days_before) || 14,
+        category: form.category,
       })
       .select()
       .single()
@@ -54,7 +165,8 @@ export default function Notifications() {
     setExhibitions(prev =>
       [data, ...prev].sort((a, b) => b.event_date.localeCompare(a.event_date))
     )
-    setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14 })
+    // 補漏：重置時包含 category，避免殘留上次選的值
+    setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14, category: '旅遊展' })
     setShowForm(false)
     setFormError('')
   }
@@ -65,6 +177,15 @@ export default function Notifications() {
     if (error) { alert('操作失敗，請重試'); return }
     setExhibitions(prev => prev.filter(e => e.id !== ex.id))
   }
+
+  // 依類型分組（兼容舊資料 category 為 null → 歸入旅遊展）
+  const byCategory = {}
+  CATEGORIES.forEach(cat => { byCategory[cat] = [] })
+  exhibitions.forEach(ex => {
+    const cat = ex.category || '旅遊展'
+    if (!byCategory[cat]) byCategory[cat] = []
+    byCategory[cat].push(ex)
+  })
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -110,6 +231,18 @@ export default function Notifications() {
                   onFocus={e => e.target.style.borderColor = 'var(--blue)'}
                   onBlur={e  => e.target.style.borderColor = 'var(--border)'}
                 />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>展覽類型</label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                    style={inputStyle}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>開始日期</label>
                   <input
@@ -164,30 +297,17 @@ export default function Notifications() {
               </p>
             )}
 
-            {/* 展覽清單 */}
-            {exhibitions.map(ex => (
-              <div key={ex.id} style={{
-                background: 'var(--card)', border: '1px solid var(--border)',
-                borderRadius: 14, padding: '14px 16px', marginBottom: 12,
-                display: 'flex', alignItems: 'flex-start', gap: 12,
-              }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                    {ex.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 2 }}>
-                    {formatDateRange(ex)}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    提前 {ex.notify_days_before} 天通知
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(ex)}
-                  style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
-                >🗑️</button>
-              </div>
-            ))}
+            {/* 展覽清單：類型 → 年份 → 卡片 */}
+            {exhibitions.length > 0 && CATEGORIES.map(cat =>
+              byCategory[cat].length > 0 ? (
+                <CategorySection
+                  key={cat}
+                  category={cat}
+                  exList={byCategory[cat]}
+                  onDelete={handleDelete}
+                />
+              ) : null
+            )}
           </>
         )}
 
