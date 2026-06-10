@@ -11,6 +11,18 @@ const inputStyle = {
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 }
 
+// 未來/進行中的展覽按日期近→遠排前面，過去的排後面（最近過去的優先）
+function sortExhibitions(list) {
+  const today = new Date().toISOString().slice(0, 10)
+  const upcoming = list
+    .filter(ex => (ex.end_date || ex.event_date) >= today)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date))
+  const past = list
+    .filter(ex => (ex.end_date || ex.event_date) < today)
+    .sort((a, b) => b.event_date.localeCompare(a.event_date))
+  return [...upcoming, ...past]
+}
+
 function formatDateRange(ex) {
   const start = ex.event_date
   const end   = ex.end_date || ex.event_date
@@ -139,8 +151,8 @@ export default function Notifications() {
 
   async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase.from('exhibitions').select('*').order('event_date', { ascending: false })
-    setExhibitions(data ?? [])
+    const { data } = await supabase.from('exhibitions').select('*')
+    setExhibitions(sortExhibitions(data ?? []))
     setLoading(false)
   }
 
@@ -162,9 +174,7 @@ export default function Notifications() {
       .single()
 
     if (error) { alert('操作失敗，請重試'); return }
-    setExhibitions(prev =>
-      [data, ...prev].sort((a, b) => b.event_date.localeCompare(a.event_date))
-    )
+    setExhibitions(prev => sortExhibitions([data, ...prev]))
     // 補漏：重置時包含 category，避免殘留上次選的值
     setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14, category: '旅遊展' })
     setShowForm(false)
