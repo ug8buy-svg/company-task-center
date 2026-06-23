@@ -21,7 +21,7 @@ function addDays(dateStr, n) {
 }
 
 // ── 帳務卡片 ──
-function AccountingCard({ record, daily, expenses, onSettle, onDelete }) {
+function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit }) {
   const [isOpen, setIsOpen] = useState(false)
 
   const totalCount = daily.reduce((s, d) => s + (d.cash_count || 0) + (d.card_count || 0), 0)
@@ -63,6 +63,10 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete }) {
           display: 'inline-block', transition: 'transform 0.2s ease',
           transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
         }}>▼</span>
+        <button
+          onClick={e => { e.stopPropagation(); onEdit(record) }}
+          style={{ background: 'none', border: 'none', fontSize: 15, color: 'var(--text-secondary)', padding: '4px', cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}
+        >✏️</button>
         <button
           onClick={e => { e.stopPropagation(); onDelete(record) }}
           style={{ background: 'none', border: 'none', fontSize: 15, color: 'var(--text-secondary)', padding: '4px', cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}
@@ -157,19 +161,40 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete }) {
   )
 }
 
-// ── 新增表單 ──
-function AccountingForm({ onSave, onCancel }) {
+// ── 新增 / 編輯表單 ──
+function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initialExpenses }) {
+  const isEdit = !!initialRecord
   const today = new Date()
-  const [title, setTitle] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [cashLeft, setCashLeft] = useState('')
-  const [days, setDays] = useState([
-    { day_index: 1, date: '', cash_count: '', card_count: '' },
-    { day_index: 2, date: '', cash_count: '', card_count: '' },
-    { day_index: 3, date: '', cash_count: '', card_count: '' },
-    { day_index: 4, date: '', cash_count: '', card_count: '' },
-  ])
-  const [expenses, setExpenses] = useState([])
+
+  const [title, setTitle] = useState(initialRecord?.title ?? '')
+  const [startDate, setStartDate] = useState(initialRecord?.start_date ?? '')
+  const [cashLeft, setCashLeft] = useState(
+    initialRecord?.cash_left != null ? String(initialRecord.cash_left) : ''
+  )
+  const [days, setDays] = useState(() => {
+    if (isEdit && initialDaily?.length) {
+      return Array.from({ length: 4 }, (_, i) => {
+        const d = initialDaily.find(x => x.day_index === i + 1)
+        return {
+          day_index: i + 1,
+          date: d?.date ?? '',
+          cash_count: d ? String(d.cash_count) : '',
+          card_count: d ? String(d.card_count) : '',
+        }
+      })
+    }
+    return [
+      { day_index: 1, date: '', cash_count: '', card_count: '' },
+      { day_index: 2, date: '', cash_count: '', card_count: '' },
+      { day_index: 3, date: '', cash_count: '', card_count: '' },
+      { day_index: 4, date: '', cash_count: '', card_count: '' },
+    ]
+  })
+  const [expenses, setExpenses] = useState(() =>
+    isEdit
+      ? (initialExpenses ?? []).map(e => ({ ...e, tempId: e.id }))
+      : []
+  )
   const [saving, setSaving] = useState(false)
 
   const year = startDate ? parseInt(startDate.split('-')[0]) : today.getFullYear()
@@ -205,38 +230,84 @@ function AccountingForm({ onSave, onCancel }) {
     if (!startDate) { alert('請選擇開始日期'); return }
     setSaving(true)
     try {
-      const { data: rec, error: recErr } = await supabase
-        .from('accounting_records')
-        .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
-        .select().single()
-      if (recErr) throw recErr
+      if (isEdit) {
+        // ── 編輯模式：UPDATE ──
+        const { data: rec, error: recErr } = await supabase
+          .from('accounting_records')
+          .update({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
+          .eq('id', initialRecord.id)
+          .select().single()
+        if (recErr) throw recErr
 
-      const dailyRows = days.map((d, i) => ({
-        record_id: rec.id,
-        day_index: d.day_index,
-        date: d.date || addDays(startDate, i),
-        cash_count: parseInt(d.cash_count) || 0,
-        card_count: parseInt(d.card_count) || 0,
-      }))
-      const { data: dailyData, error: dailyErr } = await supabase.from('accounting_daily').insert(dailyRows).select()
-      if (dailyErr) throw dailyErr
+        // 逐天更新（各天已存在，只更新數量和日期）
+        const dailyResults = await Promise.all(
+          days.map((d, i) =>
+            supabase.from('accounting_daily')
+              .update({
+                date: d.date || addDays(startDate, i),
+                cash_count: parseInt(d.cash_count) || 0,
+                card_count: parseInt(d.card_count) || 0,
+              })
+              .eq('record_id', initialRecord.id)
+              .eq('day_index', d.day_index)
+              .select()
+          )
+        )
+        const dailyData = dailyResults.flatMap(r => r.data || [])
 
-      const expRows = expenses
-        .filter(e => parseInt(e.amount) > 0)
-        .map((e, i) => ({
+        // 支出：刪除舊的，重新寫入
+        await supabase.from('accounting_expenses').delete().eq('record_id', initialRecord.id)
+        const expRows = expenses
+          .filter(e => parseInt(e.amount) > 0)
+          .map((e, i) => ({
+            record_id: initialRecord.id,
+            category: e.category,
+            note: e.note || null,
+            amount: parseInt(e.amount),
+            sort_order: i,
+          }))
+        let expData = []
+        if (expRows.length > 0) {
+          const { data, error: expErr } = await supabase.from('accounting_expenses').insert(expRows).select()
+          if (expErr) throw expErr
+          expData = data || []
+        }
+        onSave(rec, dailyData, expData)
+      } else {
+        // ── 新增模式：INSERT ──
+        const { data: rec, error: recErr } = await supabase
+          .from('accounting_records')
+          .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
+          .select().single()
+        if (recErr) throw recErr
+
+        const dailyRows = days.map((d, i) => ({
           record_id: rec.id,
-          category: e.category,
-          note: e.note || null,
-          amount: parseInt(e.amount),
-          sort_order: i,
+          day_index: d.day_index,
+          date: d.date || addDays(startDate, i),
+          cash_count: parseInt(d.cash_count) || 0,
+          card_count: parseInt(d.card_count) || 0,
         }))
-      let expData = []
-      if (expRows.length > 0) {
-        const { data, error: expErr } = await supabase.from('accounting_expenses').insert(expRows).select()
-        if (expErr) throw expErr
-        expData = data || []
+        const { data: dailyData, error: dailyErr } = await supabase.from('accounting_daily').insert(dailyRows).select()
+        if (dailyErr) throw dailyErr
+
+        const expRows = expenses
+          .filter(e => parseInt(e.amount) > 0)
+          .map((e, i) => ({
+            record_id: rec.id,
+            category: e.category,
+            note: e.note || null,
+            amount: parseInt(e.amount),
+            sort_order: i,
+          }))
+        let expData = []
+        if (expRows.length > 0) {
+          const { data, error: expErr } = await supabase.from('accounting_expenses').insert(expRows).select()
+          if (expErr) throw expErr
+          expData = data || []
+        }
+        onSave(rec, dailyData || [], expData)
       }
-      onSave(rec, dailyData || [], expData)
     } catch {
       alert('儲存失敗，請重試')
       setSaving(false)
@@ -252,7 +323,9 @@ function AccountingForm({ onSave, onCancel }) {
 
   return (
     <div className="slide-in-top" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>新增帳務</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>
+        {isEdit ? '編輯帳務' : '新增帳務'}
+      </div>
 
       {/* 基本資訊 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
@@ -305,7 +378,6 @@ function AccountingForm({ onSave, onCancel }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>支出明細</div>
         {expenses.map(e => (
           <div key={e.tempId} style={{ marginBottom: 10 }}>
-            {/* 第一行：類別 + 金額 + 刪除 */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <select
                 value={e.category}
@@ -321,7 +393,6 @@ function AccountingForm({ onSave, onCancel }) {
               <button onClick={() => removeExpense(e.tempId)}
                 style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, padding: '0 4px', lineHeight: 1 }}>🗑️</button>
             </div>
-            {/* 第二行：雜項說明（僅雜項顯示） */}
             {e.category === '雜項' && (
               <input value={e.note} onChange={ev => updateExpense(e.tempId, { ...e, note: ev.target.value })}
                 placeholder="請填說明（例：文具、膠帶）"
@@ -357,7 +428,7 @@ function AccountingForm({ onSave, onCancel }) {
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={handleSave} disabled={saving}
           style={{ flex: 1, background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 15, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
-          {saving ? '儲存中...' : '儲存帳務'}
+          {saving ? '儲存中...' : isEdit ? '更新帳務' : '儲存帳務'}
         </button>
         <button onClick={onCancel}
           style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 8, padding: '10px 16px', fontSize: 15, cursor: 'pointer' }}>
@@ -376,6 +447,7 @@ export default function Accounting() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [expandedYears, setExpandedYears] = useState(new Set())
 
   useEffect(() => { init() }, [])
@@ -439,6 +511,16 @@ export default function Accounting() {
     setShowForm(false)
   }
 
+  function handleEditSave(rec, newDaily, newExpenses) {
+    setRecords(prev =>
+      prev.map(r => r.id === rec.id ? rec : r)
+        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+    )
+    setDaily(prev => [...prev.filter(d => d.record_id !== rec.id), ...newDaily])
+    setExpenses(prev => [...prev.filter(e => e.record_id !== rec.id), ...newExpenses])
+    setEditingId(null)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
@@ -451,7 +533,7 @@ export default function Accounting() {
         <button onClick={() => navigate('/')}
           style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-secondary)', padding: '4px 8px', borderRadius: 8, lineHeight: 1, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>劉姐旅展帳務</span>
-        <button onClick={() => setShowForm(v => !v)}
+        <button onClick={() => { setShowForm(v => !v); setEditingId(null) }}
           style={{ background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ＋ 新增帳務
         </button>
@@ -459,7 +541,12 @@ export default function Accounting() {
 
       <main style={{ padding: '20px 16px', maxWidth: 680, margin: '0 auto' }}>
 
-        {showForm && <AccountingForm onSave={handleSave} onCancel={() => setShowForm(false)} />}
+        {showForm && (
+          <AccountingForm
+            onSave={handleSave}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
 
         {loading && <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 48 }}>載入中...</p>}
 
@@ -481,16 +568,28 @@ export default function Accounting() {
               <div style={{ display: 'grid', gridTemplateRows: isExpanded ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {yearRecords.map(record => (
-                      <AccountingCard
-                        key={record.id}
-                        record={record}
-                        daily={daily.filter(d => d.record_id === record.id)}
-                        expenses={expenses.filter(e => e.record_id === record.id)}
-                        onSettle={handleSettle}
-                        onDelete={handleDelete}
-                      />
-                    ))}
+                    {yearRecords.map(record =>
+                      editingId === record.id ? (
+                        <AccountingForm
+                          key={record.id}
+                          initialRecord={record}
+                          initialDaily={daily.filter(d => d.record_id === record.id)}
+                          initialExpenses={expenses.filter(e => e.record_id === record.id)}
+                          onSave={handleEditSave}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      ) : (
+                        <AccountingCard
+                          key={record.id}
+                          record={record}
+                          daily={daily.filter(d => d.record_id === record.id)}
+                          expenses={expenses.filter(e => e.record_id === record.id)}
+                          onSettle={handleSettle}
+                          onDelete={handleDelete}
+                          onEdit={() => setEditingId(record.id)}
+                        />
+                      )
+                    )}
                   </div>
                 </div>
               </div>
