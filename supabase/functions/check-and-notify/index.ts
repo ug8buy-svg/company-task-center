@@ -100,7 +100,7 @@ serve(async () => {
       if (daysLeft === ex.notify_days_before && (bossCount > 0 || staffCount > 0)) {
         await sendLine(
           admin.line_id,
-          `📋 展覽提醒｜${ex.name}\n\n距離展覽還有 ${daysLeft} 天，倒數開始！\n\n劉淑華和仕庭有待辦事項尚未完成，請注意。`,
+          `📋 展覽提醒｜${ex.name}\n\n距離展覽還有 ${daysLeft} 天，倒數開始！\n\n劉淑華和展務同仁有待辦事項尚未完成，請注意。`,
         )
       }
     }
@@ -130,8 +130,8 @@ serve(async () => {
       if (lastDoneAt && lastDoneAt >= twelveHoursAgo) {
         const time = new Date(lastDoneAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
         const msg  = nearestEx
-          ? `✅ 仕庭 已完成所有待辦事項！\n展覽：${nearestEx.name}\n完成時間：${time}`
-          : `✅ 仕庭 已完成所有待辦事項！\n完成時間：${time}`
+          ? `✅ 展務同仁 已完成所有待辦事項！\n展覽：${nearestEx.name}\n完成時間：${time}`
+          : `✅ 展務同仁 已完成所有待辦事項！\n完成時間：${time}`
         await sendLine(admin.line_id, msg)
       }
     }

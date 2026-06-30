@@ -20,7 +20,7 @@ const MODULES = [
   { icon: '📊', label: '專案進度看板', desc: '三個專案的進度追蹤',  path: '/projects',      pin: true  },
   { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',      pin: false },
   { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist',     pin: false },
-  { icon: '👤', label: '仕庭待辦清單', desc: '需仕庭確認的事項',    path: '/staff-todos',   pin: false },
+  { icon: '👤', label: '展務待辦清單', desc: '需展務人員確認的事項', path: '/staff-todos',   pin: false },
   { icon: '🔔', label: '展覽管理',    desc: '展覽日期與通知管理',   path: '/notifications', pin: true  },
 ]
 
