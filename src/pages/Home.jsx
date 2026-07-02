@@ -21,6 +21,7 @@ const MODULES = [
   { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',      pin: false },
   { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist',     pin: false },
   { icon: '👤', label: '展務待辦清單', desc: '需展務人員確認的事項', path: '/staff-todos',   pin: false },
+  { icon: '👥', label: '人力安排',    desc: '旅遊展工讀生安排紀錄', path: '/staffing',      pin: false },
   { icon: '🔔', label: '展覽管理',    desc: '展覽日期與通知管理',   path: '/notifications', pin: true  },
 ]
 

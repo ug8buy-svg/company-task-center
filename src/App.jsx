@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import PinGate from './components/PinGate'
+import SitePinGate from './components/SitePinGate'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -16,23 +17,27 @@ import Meetings from './pages/Meetings'
 import Notifications from './pages/Notifications'
 import StaffTodos from './pages/StaffTodos'
 import Accounting from './pages/Accounting'
+import Staffing from './pages/Staffing'
 
 export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/todos" element={<PinGate><Todos /></PinGate>} />
-        <Route path="/notes" element={<PinGate><Notes /></PinGate>} />
-        <Route path="/projects" element={<PinGate><Projects /></PinGate>} />
-        <Route path="/checklist" element={<Checklist />} />
-        <Route path="/meetings" element={<Meetings />} />
-        <Route path="/notifications" element={<PinGate><Notifications /></PinGate>} />
-        <Route path="/staff-todos" element={<StaffTodos />} />
-        <Route path="/accounting" element={<PinGate><Accounting /></PinGate>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <SitePinGate>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/todos" element={<PinGate><Todos /></PinGate>} />
+          <Route path="/notes" element={<PinGate><Notes /></PinGate>} />
+          <Route path="/projects" element={<PinGate><Projects /></PinGate>} />
+          <Route path="/checklist" element={<Checklist />} />
+          <Route path="/meetings" element={<Meetings />} />
+          <Route path="/notifications" element={<PinGate><Notifications /></PinGate>} />
+          <Route path="/staff-todos" element={<StaffTodos />} />
+          <Route path="/accounting" element={<PinGate><Accounting /></PinGate>} />
+          <Route path="/staffing" element={<Staffing />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </SitePinGate>
     </BrowserRouter>
   )
 }
