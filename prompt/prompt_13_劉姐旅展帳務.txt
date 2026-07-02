@@ -1,0 +1,244 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：13
+步驟：劉姐旅展帳務功能
+建立日期：2026/05/28
+================================================================
+
+我要新增「劉姐旅展帳務」功能。
+這個頁面需要 PIN 碼保護（使用現有的 PinGate）。
+
+【功能說明】
+這是展覽後的帳務結算工具。
+每次展覽結束後，我填入當次展覽的收支明細，
+系統自動計算結清金額，並標示是否需要老闆匯款。
+老闆可以看到詳細明細，並在匯款後點選完成。
+
+【資料表】
+請在 Supabase 執行以下 SQL 建立三張新資料表：
+
+-- 帳務主表（每次展覽一筆）
+CREATE TABLE accounting_records (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  year integer NOT NULL,
+  title text NOT NULL,
+  start_date date NOT NULL,
+  is_settled boolean DEFAULT false,
+  settled_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 每天業績（固定4天）
+CREATE TABLE accounting_daily (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  record_id uuid REFERENCES accounting_records(id) ON DELETE CASCADE,
+  day_index integer NOT NULL,
+  date date NOT NULL,
+  cash_count integer DEFAULT 0,
+  card_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 支出明細
+CREATE TABLE accounting_expenses (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  record_id uuid REFERENCES accounting_records(id) ON DELETE CASCADE,
+  category text NOT NULL,
+  amount integer NOT NULL,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 開啟 RLS
+ALTER TABLE accounting_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounting_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounting_expenses ENABLE ROW LEVEL SECURITY;
+
+-- 允許所有操作
+CREATE POLICY "allow_all" ON accounting_records FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all" ON accounting_daily FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all" ON accounting_expenses FOR ALL USING (true) WITH CHECK (true);
+
+【帳務欄位說明】
+
+每筆帳務（accounting_records）包含：
+- 抬頭（title）：例如「世貿一館（上聯）」
+- 年份（year）：例如 2026
+- 開始日期（start_date）：展覽第一天
+- 是否結清（is_settled）
+- 結清時間（settled_at）
+
+每天業績（accounting_daily，固定4筆，day_index 1-4）：
+- 日期（date）：start_date + (day_index - 1) 天
+- 現金張數（cash_count）
+- 刷卡張數（card_count）
+
+支出明細（accounting_expenses，可新增多筆）：
+固定支出類別（下拉選單選擇）：
+- 主持薪水
+- 工讀薪水
+- 雜項（可填說明）
+
+【計算邏輯】
+
+業績總張數 = 所有天的現金張數 + 刷卡張數 合計
+
+總支出 = 所有 accounting_expenses 的 amount 加總
+
+現金餘額 = 老闆留在現場的現金（單獨填寫一個欄位）
+請在 accounting_records 新增 cash_left integer DEFAULT 0 欄位
+
+結算公式：
+結算金額 = 現金餘額 - 總支出
+- 結算金額 >= 0 → 現金夠用，顯示綠色「已結清 +$X」
+- 結算金額 < 0 → 老闆需匯款，顯示橘色「未結 $X,XXX」（顯示絕對值）
+
+結清狀態：
+- 未結時：顯示橘色「未結 $X,XXX」，有「標記已結清」按鈕
+- 點選「標記已結清」→ is_settled = true，settled_at = 現在時間
+- 已結清：顯示綠色「已結清」，不再顯示金額
+
+【頁面結構】
+
+路由：/accounting
+需要 PinGate 保護
+
+▌第一層：年份列表頁
+- 頁面標題「劉姐旅展帳務」
+- 按年份分組，從新到舊排列（2026、2025...）
+- 每個年份顯示為一個可展開的區塊
+- 每個年份顯示該年所有展覽筆數
+- 右上角有「＋ 新增帳務」按鈕
+
+▌第二層：展覽帳務卡片（在年份區塊內展開）
+每筆帳務顯示為一張可縮放的卡片：
+
+縮起時只顯示：
+- 抬頭（例如：世貿一館（上聯））
+- 展覽日期範圍（例如：5/22 - 5/25）
+- 結清狀態標籤（綠色「已結清」或橘色「未結 $4,584」）
+- 展開箭頭（▼/▲）
+
+展開後顯示完整明細：
+
+【業績區塊】
+每天一行，格式：
+日期　現金 X 張　刷卡 X 張
+5/22　現金 38 張　刷卡 13 張
+5/23　現金 144 張　刷卡 14 張
+5/24　現金 163 張　刷卡 10 張
+5/25　現金 62 張　刷卡 8 張
+業績合計：XXX 張
+
+【支出區塊】
+每筆支出一行，格式：
+項目名稱　$金額
+主持薪水　$45,200
+工讀薪水　$17,600
+文具、膠帶　$819（雜項可填說明）
+油資　$2,965
+─────────────
+總支出　$66,584
+
+【結算區塊】
+現金餘額：$62,000（老闆留下的現金）
+結算金額：現金餘額 - 總支出 = ±X,XXX
+結清狀態：未結 $4,584 / 已結清
+
+未結時顯示：
+- 橘色醒目顯示「老闆需匯款 $4,584」
+- 「標記已結清」按鈕（點了變綠色已結清）
+
+已結清時顯示：
+- 綠色「已結清」
+- 結清時間（例如：2026/05/28 結清）
+
+【刪除帳務】
+每張卡片右上角有刪除按鈕
+confirm 確認後刪除，連帶刪除 accounting_daily 和 accounting_expenses
+
+【新增帳務表單】
+點「＋ 新增帳務」後跳出填寫表單：
+
+第一區：基本資訊
+- 年份（數字，預設今年）
+- 抬頭（文字輸入，例如：世貿一館（上聯））
+- 展覽開始日期（日期選擇器）
+- 現金餘額（老闆留下的現金）
+
+第二區：4天業績
+日期自動從開始日期算出（開始日 +0, +1, +2, +3）
+每天填：現金張數、刷卡張數
+
+第三區：支出明細
+可新增多筆，每筆包含：
+- 類別（下拉選單：主持薪水 / 工讀薪水 / 雜項）
+- 雜項說明（選雜項時才出現的文字輸入框，例如：文具、膠帶）
+- 金額
+
+新增按鈕：「＋ 新增支出項目」
+每筆右側有刪除按鈕
+
+第四區：總覽（即時計算，不需要按存檔才顯示）
+業績合計：XXX 張
+總支出：$XX,XXX
+結算金額：$XX,XXX（正數綠色，負數橘色）
+結清狀態預覽
+
+底部按鈕：「儲存帳務」
+
+【行事曆連動】
+修改 src/pages/Home.jsx 的行事曆：
+新增一種事件點：
+- 🟠 橘點（已存在的 --orange 色）：有未結清的帳務
+  * 取用 accounting_records 裡 is_settled = false 的資料
+  * 用 start_date 對應到行事曆日期
+  * 老闆點選已結清後，橘點消失
+- 已結清的帳務不顯示在行事曆上
+
+行事曆圖例更新：
+把原本的「待辦事項」橘點改為「帳務未結」橘點
+（原本待辦事項的橘點邏輯移除，因為行事曆已有足夠資訊）
+
+【首頁卡片新增】
+修改 src/pages/Home.jsx：
+在劉姐帳務（第2張卡片）後面新增一張：
+- 圖示：💰
+- 標題：劉姐旅展帳務
+- 說明：展覽收支結算記錄
+- 需要 🔒 PIN 碼
+- 點擊導向 /accounting
+
+【路由新增】
+修改 src/App.jsx：
+新增路由 /accounting，用 PinGate 包覆：
+<Route path="/accounting" element={<PinGate><Accounting /></PinGate>} />
+
+【UI 設計規範】
+沿用現有設計風格：
+- CSS 變數（--blue、--orange、--green 等）
+- 支援深色模式
+- 手機版優先
+- 數字顯示加千分位（例如：$45,200 不是 $45200）
+
+【注意事項】
+- 新增檔案：src/pages/Accounting.jsx
+- 修改檔案：src/App.jsx、src/pages/Home.jsx
+- 不要動其他頁面
+- 不要動 src/index.css（除非需要新增樣式）
+- 改完請告訴我改了什麼，不要只丟 diff
+- 資料讀取中顯示「載入中...」
+
+【完成後請告訴我】
+1. 建立和修改了哪些檔案
+2. Supabase 資料表是否建立成功
+3. 功能測試結果（新增一筆測試帳務，確認計算正確）
+4. 行事曆橘點是否正確連動
+
+================================================================
+備注：
+- accounting_records 需要額外的 cash_left 欄位，SQL 裡已包含
+- 展期固定 4 天，不需要彈性調整
+- 行事曆橘點改為帳務未結，移除原本待辦事項的橘點
+- 完成後 git push，Vercel 自動部署
+================================================================

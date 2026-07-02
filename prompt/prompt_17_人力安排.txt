@@ -1,0 +1,106 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：17
+步驟：人力安排功能
+建立日期：2026/07/02
+================================================================
+
+我要新增「人力安排」功能頁面。
+這個頁面不需要 PIN 碼，所有人都可以直接進入使用。
+
+【功能說明】
+每次旅遊展都需要安排工讀生，這個頁面讓我記錄每場展覽已安排的人員，
+清楚知道目前有幾個人確認出席。
+展覽資料直接從現有的 exhibitions 表格讀取，不需要重新輸入。
+
+【資料表】
+請在 Supabase 執行以下 SQL 建立一張新資料表：
+
+CREATE TABLE staff_assignments (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  exhibition_id uuid REFERENCES exhibitions(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  note text,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE staff_assignments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON staff_assignments FOR ALL USING (true) WITH CHECK (true);
+
+【頁面結構】
+
+路由：/staffing
+不需要 PinGate
+
+▌展覽卡片列表
+- 從 exhibitions 表格讀取所有展覽
+- 按 event_date 由近到遠排列（最近的展覽在最上面）
+- 每場展覽是一張可展開/收合的卡片
+- 預設展開最近的展覽，其他收合
+
+▌每張展覽卡片
+
+縮起時顯示：
+- 展覽名稱（title）
+- 日期範圍（event_date 到 end_date，格式：M/D - M/D）
+- 已安排人數（例如：已安排 3 人）
+- 展開箭頭（▼/▲）
+
+展開後顯示：
+- 人員清單（每筆顯示：名字、備注（若有）、刪除按鈕）
+- 清單為空時顯示「尚未安排任何人員」
+- 底部新增區：輸入框（名字）+ 備注輸入框（選填）+ 新增按鈕
+- 新增後立即出現在清單，輸入框清空
+
+▌人員操作
+- 新增：填名字（必填）、備注（選填，例如：全程、僅第一天），按新增
+- 刪除：右側垃圾桶，confirm 確認後刪除
+- 名字 maxLength={50}，備注 maxLength={100}
+
+【UI 設計規範】
+沿用現有設計風格：
+- CSS 變數（--bg、--card、--blue 等）
+- 支援深色模式
+- 手機版優先
+
+卡片縮起時右側顯示「已安排 X 人」的藍色小標籤
+人員清單每筆格式：
+- 左側：名字（粗體）+ 備注（小字，次要文字色）
+- 右側：垃圾桶圖示
+
+【首頁卡片新增】
+修改 src/pages/Home.jsx：
+在展務待辦清單卡片後面新增一張：
+- 圖示：👥
+- 標題：人力安排
+- 說明：旅遊展工讀生安排紀錄
+- 不需要鎖頭圖示
+- 點擊導向 /staffing
+
+【路由新增】
+修改 src/App.jsx：
+新增路由 /staffing，不需要 PinGate：
+<Route path="/staffing" element={<Staffing />} />
+
+【注意事項】
+- 新增檔案：src/pages/Staffing.jsx
+- 修改檔案：src/App.jsx、src/pages/Home.jsx
+- 不要動其他頁面
+- 不要動 src/index.css（除非需要新增樣式）
+- 改完請告訴我改了什麼，不要只丟 diff
+- 資料讀取中顯示「載入中...」
+- exhibitions 表格有 end_date 欄位（之前已新增），讀取時一起帶出
+
+【完成後請告訴我】
+1. 建立和修改了哪些檔案
+2. Supabase 資料表是否建立成功
+3. 功能測試結果（讀取展覽、新增人員、刪除人員是否正常）
+
+================================================================
+備注：
+- 展覽資料從現有 exhibitions 表格讀取，不需要額外輸入
+- staff_assignments 透過 exhibition_id 對應到展覽
+- 刪除展覽時（ON DELETE CASCADE）該展覽的人員資料自動一起刪除
+- 完成後 git push，Vercel 自動部署
+================================================================

@@ -1,0 +1,118 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：15
+步驟：LINE 單筆通知按鈕
+建立日期：2026/05/29
+================================================================
+
+我要在劉姐待辦清單和劉姐專屬備注的每筆項目上，
+加一個可以即時發送 LINE 通知給劉淑華的按鈕。
+
+【功能說明】
+每筆未完成的待辦事項和每筆備注旁邊，
+加一個 LINE 通知按鈕，讓我可以針對單一事項立即提醒老闆。
+按鈕只有我看得到（因為要進 PIN 碼才能看到這個頁面），
+但為了防止誤觸，按了之後要跳出確認提示。
+
+【劉姐待辦清單的通知按鈕】
+
+修改範圍：src/pages/Todos.jsx
+
+按鈕位置：
+- 每筆「未完成」的待辦項目右側，放在垃圾桶圖示旁邊
+- 已完成的待辦不顯示通知按鈕
+
+按鈕樣式：
+- LINE 綠色圖示按鈕（可用文字「LINE」或 📱 圖示代替）
+- 顏色：#06C755（LINE 綠）
+- 小尺寸，不要搶過垃圾桶按鈕
+
+點擊後流程：
+1. 跳出瀏覽器原生 confirm()：
+   「確定要發送 LINE 通知給劉姐嗎？\n內容：[待辦事項內容]」
+2. 確認後呼叫 Supabase Edge Function 發送 LINE 通知
+3. 成功後顯示「✅ 通知已發送」短暫提示（1.5 秒後消失）
+4. 失敗時顯示「❌ 發送失敗，請重試」
+
+通知訊息格式（發給劉淑華的 LINE）：
+```
+📌 待辦提醒
+
+[待辦事項內容]
+
+請儘速確認並完成此項目。
+— 公司任務中心
+```
+
+【劉姐專屬備注的通知按鈕】
+
+修改範圍：src/pages/Notes.jsx
+
+按鈕位置：
+- 每筆備注卡片右上角，放在垃圾桶圖示旁邊
+- 所有備注都顯示通知按鈕（備注沒有完成狀態）
+
+按鈕樣式：同上，LINE 綠色
+
+點擊後流程：
+1. 跳出瀏覽器原生 confirm()：
+   「確定要發送 LINE 通知給劉姐嗎？\n內容：[備注內容前30字]...」
+2. 確認後呼叫 Supabase Edge Function 發送 LINE 通知
+3. 成功/失敗提示同上
+
+通知訊息格式（發給劉淑華的 LINE）：
+```
+📝 備注提醒
+
+[備注完整內容]
+
+— 公司任務中心
+```
+
+【發送通知的方式】
+
+使用現有的 send-line-notification Edge Function。
+劉淑華的 line_id：U60f1d14468f1f8f68075576a8e331c11
+
+呼叫方式（前端直接呼叫 Edge Function）：
+```javascript
+const response = await fetch(
+  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-line-notification`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+    },
+    body: JSON.stringify({
+      line_id: 'U60f1d14468f1f8f68075576a8e331c11',
+      message: `[訊息內容]`
+    })
+  }
+)
+```
+
+請先確認 send-line-notification Edge Function 的實際參數格式，
+確保呼叫方式與現有的 Edge Function 相符。
+
+【注意事項】
+- 修改範圍：src/pages/Todos.jsx、src/pages/Notes.jsx
+- 不要動其他頁面
+- 不要動資料表結構
+- 不要動 Edge Function
+- 改完請告訴我改了什麼，不要只丟 diff
+- LINE 的 line_id 不要寫死在程式碼裡，從 Supabase users 表格讀取
+  （WHERE role = 'boss' 取得 boss 的 line_id）
+
+【完成後請告訴我】
+1. 修改了哪些檔案
+2. 通知發送測試結果（實際發一則給劉淑華確認格式）
+3. 有沒有遇到任何錯誤
+
+================================================================
+備注：
+- send-line-notification 是現有的 Edge Function，不需要新建
+- boss 的 line_id 從 users 表格動態讀取，不寫死
+- 確認提示用瀏覽器原生 confirm()，不需要自製彈窗
+- 成功/失敗提示用簡單的 state 控制，1.5 秒後自動消失
+================================================================
