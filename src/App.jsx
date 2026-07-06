@@ -18,6 +18,7 @@ import Notifications from './pages/Notifications'
 import StaffTodos from './pages/StaffTodos'
 import Accounting from './pages/Accounting'
 import Staffing from './pages/Staffing'
+import Weekly from './pages/Weekly'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/staff-todos" element={<StaffTodos />} />
           <Route path="/accounting" element={<PinGate><Accounting /></PinGate>} />
           <Route path="/staffing" element={<Staffing />} />
+          <Route path="/weekly" element={<Weekly />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </SitePinGate>

@@ -18,6 +18,7 @@ const MODULES = [
   { icon: '📝', label: '劉姐專屬備注', desc: '僅限劉姐與管理者',    path: '/notes',         pin: true  },
   { icon: '💰', label: '劉姐旅展帳務', desc: '展覽收支結算記錄',    path: '/accounting',    pin: true  },
   { icon: '📊', label: '專案進度看板', desc: '三個專案的進度追蹤',  path: '/projects',      pin: true  },
+  { icon: '📅', label: '週工作看板',  desc: '每週任務安排與進度追蹤', path: '/weekly',       pin: false },
   { icon: '🗒️', label: '會議記錄',    desc: '三方即時共用記錄',    path: '/meetings',      pin: false },
   { icon: '✅', label: '展覽清點表',   desc: '出發當天逐項確認',    path: '/checklist',     pin: false },
   { icon: '👤', label: '展務待辦清單', desc: '需展務人員確認的事項', path: '/staff-todos',   pin: false },
