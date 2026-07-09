@@ -22,22 +22,38 @@ function fmtDate(dateStr) {
   return `${parseInt(m)}/${parseInt(d)}`
 }
 
+const ROLE_STYLE = {
+  '工讀': { color: 'var(--blue)',  bg: 'rgba(37,99,235,0.10)',  border: 'var(--blue)'  },
+  '業務': { color: 'var(--green)', bg: 'rgba(22,163,74,0.10)',  border: 'var(--green)' },
+}
+
 // ── 展覽卡片 ──
 function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
-  const [isOpen, setIsOpen]   = useState(defaultOpen)
-  const [name, setName]       = useState('')
-  const [note, setNote]       = useState('')
-  const [adding, setAdding]   = useState(false)
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [name, setName]     = useState('')
+  const [note, setNote]     = useState('')
+  const [role, setRole]     = useState('工讀')
+  const [adding, setAdding] = useState(false)
 
   const dateRange = ex.end_date && ex.end_date !== ex.event_date
     ? `${fmtDate(ex.event_date)} - ${fmtDate(ex.end_date)}`
     : fmtDate(ex.event_date)
 
+  // 統計標籤文字
+  const partCount  = assignments.filter(a => (a.role || '工讀') === '工讀').length
+  const salesCount = assignments.filter(a => a.role === '業務').length
+  const countParts = []
+  if (partCount  > 0) countParts.push(`工讀 ${partCount}`)
+  if (salesCount > 0) countParts.push(`業務 ${salesCount}`)
+  const countLabel = assignments.length === 0
+    ? '已安排 0 人'
+    : `已安排 ${assignments.length} 人（${countParts.join('・')}）`
+
   async function handleAdd() {
     if (!name.trim()) return
     setAdding(true)
-    const ok = await onAdd(ex.id, name.trim(), note.trim())
-    if (ok) { setName(''); setNote('') }
+    const ok = await onAdd(ex.id, name.trim(), note.trim(), role)
+    if (ok) { setName(''); setNote(''); setRole('工讀') }
     setAdding(false)
   }
 
@@ -67,7 +83,7 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
           background: 'rgba(37,99,235,0.10)', border: '1px solid var(--blue)',
           borderRadius: 20, padding: '2px 10px', flexShrink: 0, whiteSpace: 'nowrap',
         }}>
-          已安排 {assignments.length} 人
+          {countLabel}
         </span>
         <span style={{
           fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0,
@@ -88,23 +104,32 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
               </p>
             ) : (
               <div style={{ marginBottom: 14 }}>
-                {assignments.map(a => (
-                  <div key={a.id} style={{
-                    display: 'flex', alignItems: 'center',
-                    padding: '8px 0', borderBottom: '1px solid var(--border)',
-                  }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</span>
-                      {a.note && (
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{a.note}</span>
-                      )}
+                {assignments.map(a => {
+                  const r = a.role || '工讀'
+                  const rs = ROLE_STYLE[r] || ROLE_STYLE['工讀']
+                  return (
+                    <div key={a.id} style={{
+                      display: 'flex', alignItems: 'center',
+                      padding: '8px 0', borderBottom: '1px solid var(--border)',
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</span>
+                        {a.note && (
+                          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{a.note}</span>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, color: rs.color,
+                        background: rs.bg, border: `1px solid ${rs.border}`,
+                        borderRadius: 20, padding: '2px 8px', marginRight: 8, flexShrink: 0,
+                      }}>{r}</span>
+                      <button
+                        onClick={() => onDelete(a)}
+                        style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
+                      >🗑️</button>
                     </div>
-                    <button
-                      onClick={() => onDelete(a)}
-                      style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
-                    >🗑️</button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -130,6 +155,14 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
                 onFocus={e => e.target.style.borderColor = 'var(--blue)'}
                 onBlur={e  => e.target.style.borderColor = 'var(--border)'}
               />
+              <select
+                value={role}
+                onChange={e => setRole(e.target.value)}
+                style={{ ...inp, flex: '0 0 auto' }}
+              >
+                <option value="工讀">工讀</option>
+                <option value="業務">業務</option>
+              </select>
               <button
                 onClick={handleAdd}
                 disabled={adding || !name.trim()}
@@ -211,10 +244,10 @@ export default function Staffing() {
     setLoading(false)
   }
 
-  async function handleAdd(exhibitionId, name, note) {
+  async function handleAdd(exhibitionId, name, note, role) {
     const { data, error } = await supabase
       .from('staff_assignments')
-      .insert({ exhibition_id: exhibitionId, name, note: note || null, sort_order: 0 })
+      .insert({ exhibition_id: exhibitionId, name, note: note || null, role: role || '工讀', sort_order: 0 })
       .select().single()
     if (error) { alert('操作失敗，請重試'); return false }
     setAssignments(prev => [...prev, data])
