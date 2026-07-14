@@ -41,7 +41,7 @@ function groupByAssignee(tasks) {
 }
 
 // ── 歷史週 ──
-function HistoryWeek({ plan, tasks }) {
+function HistoryWeek({ plan, tasks, onDeleteWeek }) {
   const [open, setOpen] = useState(false)
   const done = tasks.filter(t => t.is_done).length
   const groups = groupByAssignee(tasks)
@@ -63,6 +63,10 @@ function HistoryWeek({ plan, tasks }) {
             {done}/{tasks.length} 完成
           </span>
         </div>
+        <button
+          onClick={e => { e.stopPropagation(); onDeleteWeek(plan) }}
+          style={{ background: 'none', border: 'none', fontSize: 15, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}
+        >🗑️</button>
         <span style={{
           fontSize: 11, color: 'var(--text-secondary)',
           display: 'inline-block', transition: 'transform 0.2s',
@@ -355,6 +359,14 @@ export default function Weekly() {
     setTasks(prev => prev.filter(t => t.id !== task.id))
   }
 
+  async function handleDeleteWeek(plan) {
+    if (!window.confirm(`確定要刪除「${fmtDate(plan.week_start)} - ${fmtDate(plan.week_end)}」這週的所有紀錄嗎？`)) return
+    const { error } = await supabase.from('weekly_plans').delete().eq('id', plan.id)
+    if (error) { alert('操作失敗，請重試'); return }
+    setPlans(prev => prev.filter(p => p.id !== plan.id))
+    setTasks(prev => prev.filter(t => t.plan_id !== plan.id))
+  }
+
   async function handleAdd(planId, assignee, content, isPending) {
     const { data, error } = await supabase
       .from('weekly_tasks')
@@ -410,6 +422,7 @@ export default function Weekly() {
                 key={p.id}
                 plan={p}
                 tasks={tasks.filter(t => t.plan_id === p.id)}
+                onDeleteWeek={handleDeleteWeek}
               />
             ))}
           </div>
