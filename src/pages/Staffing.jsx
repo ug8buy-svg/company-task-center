@@ -35,9 +35,18 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
   const [role, setRole]     = useState('工讀')
   const [adding, setAdding] = useState(false)
 
+  const today   = new Date().toISOString().slice(0, 10)
+  const isPast  = (ex.end_date || ex.event_date) < today
+
   const dateRange = ex.end_date && ex.end_date !== ex.event_date
     ? `${fmtDate(ex.event_date)} - ${fmtDate(ex.end_date)}`
     : fmtDate(ex.event_date)
+
+  // 人員按角色排序：工讀 → 業務
+  const ROLE_ORDER = { '工讀': 0, '業務': 1 }
+  const sortedAssignments = [...assignments].sort(
+    (a, b) => (ROLE_ORDER[a.role || '工讀'] ?? 0) - (ROLE_ORDER[b.role || '工讀'] ?? 0)
+  )
 
   // 統計標籤文字
   const partCount  = assignments.filter(a => (a.role || '工讀') === '工讀').length
@@ -68,6 +77,7 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
     <div style={{
       background: 'var(--card)', border: '1px solid var(--border)',
       borderRadius: 14, overflow: 'hidden', marginBottom: 10,
+      opacity: isPast ? 0.6 : 1,
     }}>
       {/* 縮起狀態：名稱、日期、已安排人數 */}
       <div
@@ -76,7 +86,7 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{ex.name}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{dateRange}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, textDecoration: isPast ? 'line-through' : 'none' }}>{dateRange}</div>
         </div>
         <span style={{
           fontSize: 12, fontWeight: 600, color: 'var(--blue)',
@@ -98,13 +108,13 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
           <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px 16px' }}>
 
             {/* 人員清單 */}
-            {assignments.length === 0 ? (
+            {sortedAssignments.length === 0 ? (
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', padding: '10px 0 14px' }}>
                 尚未安排任何人員
               </p>
             ) : (
               <div style={{ marginBottom: 14 }}>
-                {assignments.map(a => {
+                {sortedAssignments.map(a => {
                   const r = a.role || '工讀'
                   const rs = ROLE_STYLE[r] || ROLE_STYLE['工讀']
                   return (
