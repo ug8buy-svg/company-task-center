@@ -275,21 +275,30 @@ export default function Notifications() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>
                   ⚠️ 撞期警示
                 </div>
-                {Object.entries(collisionGroups).map(([cat, pairs]) => (
-                  <div key={cat} style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)', opacity: 0.7, marginBottom: 3 }}>
-                      {cat}
+                {collisions.map(({ a, b, overlapStart, overlapEnd }, idx) => {
+                  const catA = a.category || '旅遊展'
+                  const catB = b.category || '旅遊展'
+                  const tagA = catA === '寵物展' ? '寵' : '旅'
+                  const tagB = catB === '寵物展' ? '寵' : '旅'
+                  const tagStyle = {
+                    fontSize: 11, fontWeight: 700,
+                    border: '1px solid rgba(220,38,38,0.5)',
+                    borderRadius: 4, padding: '1px 5px', marginRight: 4,
+                    display: 'inline-block', lineHeight: 1.4,
+                  }
+                  return (
+                    <div key={idx} style={{ fontSize: 13, color: 'var(--red)', lineHeight: 2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={tagStyle}>{tagA}</span>
+                      <span style={{ fontWeight: 600 }}>{a.name}</span>
+                      <span style={{ opacity: 0.6 }}>×</span>
+                      <span style={tagStyle}>{tagB}</span>
+                      <span style={{ fontWeight: 600 }}>{b.name}</span>
+                      <span style={{ opacity: 0.65, fontSize: 12 }}>
+                        {fmtShort(overlapStart)}{overlapStart !== overlapEnd ? `－${fmtShort(overlapEnd)}` : ''}
+                      </span>
                     </div>
-                    {pairs.map(({ a, b, overlapStart, overlapEnd }, idx) => (
-                      <div key={idx} style={{ fontSize: 13, color: 'var(--red)', lineHeight: 1.8, paddingLeft: 8 }}>
-                        {a.name} × {b.name}
-                        <span style={{ opacity: 0.75, marginLeft: 8 }}>
-                          {fmtShort(overlapStart)}{overlapStart !== overlapEnd ? `－${fmtShort(overlapEnd)}` : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
