@@ -1,0 +1,161 @@
+================================================================
+公司任務中心 — 開發指令紀錄
+指令編號：18
+步驟：週工作看板
+建立日期：2026/07/06
+================================================================
+
+我要新增「週工作看板」功能頁面。
+這個頁面不需要 PIN 碼，所有人都可以直接進入使用。
+
+【功能說明】
+每週週一老闆安排工作，週五檢核完成進度。
+每個人的任務分開列，任務可以標記「待確認」讓老闆看到。
+所有人用同一個頁面，老闆只看不操作。
+舊的週記錄收合保留可以回頭查。
+
+【資料表】
+請在 Supabase 執行以下 SQL 建立兩張新資料表：
+
+-- 每週工作紀錄主表
+CREATE TABLE weekly_plans (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  week_start date NOT NULL,
+  week_end date NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 每筆任務
+CREATE TABLE weekly_tasks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  plan_id uuid REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  assignee text NOT NULL,
+  content text NOT NULL,
+  is_done boolean DEFAULT false,
+  is_pending_confirm boolean DEFAULT false,
+  done_at timestamptz,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 開啟 RLS
+ALTER TABLE weekly_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON weekly_plans FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all" ON weekly_tasks FOR ALL USING (true) WITH CHECK (true);
+
+【週期邏輯】
+
+本週定義：
+- 週一到週五
+- 系統自動計算本週的 week_start（週一）和 week_end（週五）
+- 進入頁面時，如果本週還沒有 weekly_plans 紀錄，自動建立一筆
+- 不需要使用者手動建立新週
+
+顯示邏輯：
+- 最上方固定顯示「本週」（自動展開）
+- 下方顯示所有歷史週，從新到舊排列，預設收合
+- 每個歷史週標題顯示日期範圍（例如：2026/06/22 - 06/26）
+
+【任務狀態】
+
+每筆任務有兩個獨立的狀態：
+
+1. 完成狀態（is_done）
+   - 未完成：空白勾選框
+   - 已完成：藍色打勾，文字變灰加刪除線
+   - 任何狀態下都可以直接打勾完成
+
+2. 待確認狀態（is_pending_confirm）
+   - 未標記：一般顯示
+   - 已標記：橘色「待確認」標籤，讓老闆一眼看到
+   - 任何人都可以切換這個狀態（點一下標記，再點一下取消）
+   - 已完成的任務也可以有「待確認」標籤（兩個狀態獨立）
+
+【頁面結構】
+
+▌本週區塊（預設展開）
+
+標題列：本週（M/D - M/D）
+
+「待確認」摘要區：
+- 如果本週有任何 is_pending_confirm = true 的任務
+- 在本週標題下方顯示橘色摘要框：
+  「🔔 本週有 X 項待確認事項」
+- 點擊可以跳到對應任務（或只是提示，不需要跳轉也可以）
+
+按負責人分組顯示任務：
+- 每個負責人是一個子區塊，顯示名字和任務清單
+- 同一個負責人的任務排在一起
+- 負責人的順序按照第一筆任務的建立時間排列
+
+每筆任務顯示：
+- 左側：勾選框
+- 中間：任務內容
+- 右側：🔔 待確認切換按鈕 + 🗑️ 刪除按鈕
+- 已標記待確認時，任務整行顯示淡橘色背景 + 「待確認」橘色小標籤
+
+新增任務區（放在本週區塊底部）：
+- 負責人輸入框（文字輸入，例如：阿緯）
+- 任務內容輸入框
+- 「待確認」勾選框（新增時就可以標記）
+- 新增按鈕
+- 負責人 maxLength={20}，任務內容 maxLength={200}
+- 送出後立即顯示，輸入框清空，負責人欄位記住上次輸入的名字（存 localStorage）
+
+▌歷史週區塊（預設收合）
+
+每個歷史週：
+- 標題顯示日期範圍 + 該週任務完成比例（例如：2026/06/22 - 06/26　8/10 完成）
+- 點擊展開，顯示當週所有任務（唯讀，不能新增或刪除）
+- 歷史週只能看，不能編輯
+
+【刪除任務】
+- 只有本週的任務可以刪除
+- 右側垃圾桶，confirm 確認後刪除
+- 歷史週任務沒有刪除按鈕
+
+【UI 設計規範】
+沿用現有設計風格：
+- CSS 變數（--bg、--card、--blue、--orange 等）
+- 支援深色模式
+- 手機版優先
+- 待確認：用 --orange 色
+- 已完成：文字灰色加刪除線
+- 待確認摘要框：淡橘色背景，橘色文字
+
+【首頁卡片新增】
+修改 src/pages/Home.jsx：
+在「專案進度看板」卡片後面新增一張：
+- 圖示：📅
+- 標題：週工作看板
+- 說明：每週任務安排與進度追蹤
+- 不需要鎖頭圖示
+- 點擊導向 /weekly
+
+【路由新增】
+修改 src/App.jsx：
+新增路由 /weekly，不需要 PinGate：
+<Route path="/weekly" element={<Weekly />} />
+
+【注意事項】
+- 新增檔案：src/pages/Weekly.jsx
+- 修改檔案：src/App.jsx、src/pages/Home.jsx
+- 不要動其他頁面
+- 不要動 src/index.css（除非需要新增樣式）
+- 改完請告訴我改了什麼，不要只丟 diff
+- 資料讀取中顯示「載入中...」
+- 負責人名字用 localStorage 記住上次輸入的值
+
+【完成後請告訴我】
+1. 建立和修改了哪些檔案
+2. Supabase 資料表是否建立成功
+3. 功能測試結果（本週自動建立、新增任務、切換待確認、打勾完成是否正常）
+
+================================================================
+備注：
+- 本週如果已存在 weekly_plans 紀錄就直接用，不重複建立
+- 週一到週五，週六週日算下週（或顯示本週，視使用情境而定）
+- 歷史週唯讀，只有本週可以新增和刪除任務
+- 完成後 git push，Vercel 自動部署
+================================================================

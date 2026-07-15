@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const CATEGORIES = ['旅遊展', '寵物展']
+const COMPANIES  = ['上聯', '展昭', '威典', '生動', '其他']
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', fontSize: 14,
@@ -11,7 +12,6 @@ const inputStyle = {
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 }
 
-// 未來/進行中的展覽按日期近→遠排前面，過去的排後面（最近過去的優先）
 function sortExhibitions(list) {
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = list
@@ -31,7 +31,31 @@ function formatDateRange(ex) {
   return `${start.replace(/-/g, '/')} ～ ${end.replace(/-/g, '/')}（共${days}天）`
 }
 
-// ── 展覽卡片（樣式與功能不變）──
+function fmtShort(dateStr) {
+  if (!dateStr) return ''
+  const [, m, d] = dateStr.split('-')
+  return `${parseInt(m)}/${parseInt(d)}`
+}
+
+function detectCollisions(exhibitions) {
+  const pairs = []
+  for (let i = 0; i < exhibitions.length; i++) {
+    for (let j = i + 1; j < exhibitions.length; j++) {
+      const a = exhibitions[i]
+      const b = exhibitions[j]
+      const startA = a.event_date
+      const endA   = a.end_date || a.event_date
+      const startB = b.event_date
+      const endB   = b.end_date || b.event_date
+      if (startA <= endB && endA >= startB) {
+        pairs.push({ a, b })
+      }
+    }
+  }
+  return pairs
+}
+
+// ── 展覽卡片 ──
 function ExhibitionCard({ ex, onDelete }) {
   return (
     <div style={{
@@ -43,11 +67,8 @@ function ExhibitionCard({ ex, onDelete }) {
         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
           {ex.name}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 2 }}>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           {formatDateRange(ex)}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-          提前 {ex.notify_days_before} 天通知
         </div>
       </div>
       <button
@@ -58,7 +79,7 @@ function ExhibitionCard({ ex, onDelete }) {
   )
 }
 
-// ── 年份區塊（最新年份預設展開）──
+// ── 年份區塊 ──
 function YearSection({ year, exList, isNewest, onDelete }) {
   const [open, setOpen] = useState(isNewest)
   return (
@@ -85,11 +106,9 @@ function YearSection({ year, exList, isNewest, onDelete }) {
   )
 }
 
-// ── 類型區塊（預設展開）──
+// ── 類型區塊 ──
 function CategorySection({ category, exList, onDelete }) {
   const [open, setOpen] = useState(true)
-
-  // 依年份分組，由新到舊
   const yearMap = {}
   exList.forEach(ex => {
     const yr = ex.event_date.slice(0, 4)
@@ -143,8 +162,10 @@ export default function Notifications() {
   const [exhibitions, setExhibitions] = useState([])
   const [loading,     setLoading]     = useState(true)
   const [showForm,    setShowForm]    = useState(false)
-  // 補漏：category 加入 form 初始狀態
-  const [form, setForm] = useState({ name: '', event_date: '', end_date: '', notify_days_before: 14, category: '旅遊展' })
+  const [form, setForm] = useState({
+    company: '上聯', companyCustom: '', location: '',
+    event_date: '', end_date: '', category: '旅遊展',
+  })
   const [formError, setFormError] = useState('')
 
   useEffect(() => { fetchAll() }, [])
@@ -157,17 +178,22 @@ export default function Notifications() {
   }
 
   async function handleAdd() {
-    if (!form.name.trim())  { setFormError('請輸入展覽名稱'); return }
-    if (!form.event_date)   { setFormError('請選擇開始日期'); return }
+    const companyName = form.company === '其他' ? form.companyCustom.trim() : form.company
+    if (!form.location.trim()) { setFormError('請輸入展覽地點'); return }
+    if (!companyName)          { setFormError('請輸入展覽公司名稱'); return }
+    if (!form.event_date)      { setFormError('請選擇開始日期'); return }
     if (form.end_date && form.end_date < form.event_date) { setFormError('結束日期不可早於開始日期'); return }
+
+    const name = `${form.location.trim()}（${companyName}）`
 
     const { data, error } = await supabase
       .from('exhibitions')
       .insert({
-        name: form.name.trim(),
+        name,
+        company: companyName,
+        location: form.location.trim(),
         event_date: form.event_date,
         end_date: form.end_date || null,
-        notify_days_before: Number(form.notify_days_before) || 14,
         category: form.category,
       })
       .select()
@@ -175,8 +201,7 @@ export default function Notifications() {
 
     if (error) { alert('操作失敗，請重試'); return }
     setExhibitions(prev => sortExhibitions([data, ...prev]))
-    // 補漏：重置時包含 category，避免殘留上次選的值
-    setForm({ name: '', event_date: '', end_date: '', notify_days_before: 14, category: '旅遊展' })
+    setForm({ company: '上聯', companyCustom: '', location: '', event_date: '', end_date: '', category: '旅遊展' })
     setShowForm(false)
     setFormError('')
   }
@@ -188,7 +213,8 @@ export default function Notifications() {
     setExhibitions(prev => prev.filter(e => e.id !== ex.id))
   }
 
-  // 依類型分組（兼容舊資料 category 為 null → 歸入旅遊展）
+  const collisions = detectCollisions(exhibitions)
+
   const byCategory = {}
   CATEGORIES.forEach(cat => { byCategory[cat] = [] })
   exhibitions.forEach(ex => {
@@ -225,6 +251,23 @@ export default function Notifications() {
 
         {!loading && (
           <>
+            {/* 撞期警示 */}
+            {collisions.length > 0 && (
+              <div style={{
+                background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.4)',
+                borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>
+                  ⚠️ 撞期警示
+                </div>
+                {collisions.map(({ a, b }, idx) => (
+                  <div key={idx} style={{ fontSize: 13, color: 'var(--red)', lineHeight: 1.8 }}>
+                    {a.name} {fmtShort(a.event_date)}-{fmtShort(a.end_date || a.event_date)} 與 {b.name} {fmtShort(b.event_date)}-{fmtShort(b.end_date || b.event_date)} 日期重疊
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* 新增表單 */}
             {showForm && (
               <div className="slide-in-top" style={{
@@ -232,15 +275,6 @@ export default function Notifications() {
                 borderRadius: 14, padding: 16, marginBottom: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
               }}>
-                <input
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="展覽名稱"
-                  maxLength={100}
-                  style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--blue)'}
-                  onBlur={e  => e.target.style.borderColor = 'var(--border)'}
-                />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>展覽類型</label>
                   <select
@@ -252,6 +286,41 @@ export default function Notifications() {
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>展覽公司 *</label>
+                  <select
+                    value={form.company}
+                    onChange={e => setForm(f => ({ ...f, company: e.target.value, companyCustom: '' }))}
+                    style={inputStyle}
+                  >
+                    {COMPANIES.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  {form.company === '其他' && (
+                    <input
+                      value={form.companyCustom}
+                      onChange={e => setForm(f => ({ ...f, companyCustom: e.target.value }))}
+                      placeholder="請輸入公司名稱"
+                      maxLength={50}
+                      style={{ ...inputStyle, marginTop: 6 }}
+                      onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+                      onBlur={e  => e.target.style.borderColor = 'var(--border)'}
+                    />
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>展覽地點 *</label>
+                  <input
+                    value={form.location}
+                    onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                    placeholder="例如：高雄展覽館、台北世貿一館"
+                    maxLength={100}
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+                    onBlur={e  => e.target.style.borderColor = 'var(--border)'}
+                  />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>開始日期</label>
@@ -268,17 +337,6 @@ export default function Notifications() {
                   <input
                     type="date" value={form.end_date}
                     onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
-                    style={inputStyle}
-                    onFocus={e => e.target.style.borderColor = 'var(--blue)'}
-                    onBlur={e  => e.target.style.borderColor = 'var(--border)'}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>提前幾天通知</label>
-                  <input
-                    type="number" min={1} max={60}
-                    value={form.notify_days_before}
-                    onChange={e => setForm(f => ({ ...f, notify_days_before: e.target.value }))}
                     style={inputStyle}
                     onFocus={e => e.target.style.borderColor = 'var(--blue)'}
                     onBlur={e  => e.target.style.borderColor = 'var(--border)'}
@@ -307,7 +365,7 @@ export default function Notifications() {
               </p>
             )}
 
-            {/* 展覽清單：類型 → 年份 → 卡片 */}
+            {/* 展覽清單 */}
             {exhibitions.length > 0 && CATEGORIES.map(cat =>
               byCategory[cat].length > 0 ? (
                 <CategorySection
@@ -320,7 +378,6 @@ export default function Notifications() {
             )}
           </>
         )}
-
       </main>
     </div>
   )
