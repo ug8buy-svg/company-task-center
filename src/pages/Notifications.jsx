@@ -48,11 +48,25 @@ function detectCollisions(exhibitions) {
       const startB = b.event_date
       const endB   = b.end_date || b.event_date
       if (startA <= endB && endA >= startB) {
-        pairs.push({ a, b })
+        const overlapStart = startA >= startB ? startA : startB
+        const overlapEnd   = endA <= endB ? endA : endB
+        pairs.push({ a, b, overlapStart, overlapEnd })
       }
     }
   }
   return pairs
+}
+
+function groupCollisions(pairs) {
+  const groups = {}
+  pairs.forEach(pair => {
+    const catA = pair.a.category || '旅遊展'
+    const catB = pair.b.category || '旅遊展'
+    const key  = catA === catB ? catA : [catA, catB].sort().join('＋')
+    if (!groups[key]) groups[key] = []
+    groups[key].push(pair)
+  })
+  return groups
 }
 
 // ── 展覽卡片 ──
@@ -213,7 +227,8 @@ export default function Notifications() {
     setExhibitions(prev => prev.filter(e => e.id !== ex.id))
   }
 
-  const collisions = detectCollisions(exhibitions)
+  const collisions      = detectCollisions(exhibitions)
+  const collisionGroups = groupCollisions(collisions)
 
   const byCategory = {}
   CATEGORIES.forEach(cat => { byCategory[cat] = [] })
@@ -257,12 +272,22 @@ export default function Notifications() {
                 background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.4)',
                 borderRadius: 12, padding: '12px 14px', marginBottom: 16,
               }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>
                   ⚠️ 撞期警示
                 </div>
-                {collisions.map(({ a, b }, idx) => (
-                  <div key={idx} style={{ fontSize: 13, color: 'var(--red)', lineHeight: 1.8 }}>
-                    {a.name} {fmtShort(a.event_date)}-{fmtShort(a.end_date || a.event_date)} 與 {b.name} {fmtShort(b.event_date)}-{fmtShort(b.end_date || b.event_date)} 日期重疊
+                {Object.entries(collisionGroups).map(([cat, pairs]) => (
+                  <div key={cat} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)', opacity: 0.7, marginBottom: 3 }}>
+                      {cat}
+                    </div>
+                    {pairs.map(({ a, b, overlapStart, overlapEnd }, idx) => (
+                      <div key={idx} style={{ fontSize: 13, color: 'var(--red)', lineHeight: 1.8, paddingLeft: 8 }}>
+                        {a.name} × {b.name}
+                        <span style={{ opacity: 0.75, marginLeft: 8 }}>
+                          {fmtShort(overlapStart)}{overlapStart !== overlapEnd ? `－${fmtShort(overlapEnd)}` : ''}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
