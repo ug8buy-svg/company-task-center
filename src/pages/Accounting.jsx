@@ -24,7 +24,9 @@ function addDays(dateStr, n) {
 function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit }) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const totalCount = daily.reduce((s, d) => s + (d.cash_count || 0) + (d.card_count || 0), 0)
+  const cashCount = daily.reduce((s, d) => s + (d.cash_count || 0), 0)
+  const cardCount = daily.reduce((s, d) => s + (d.card_count || 0), 0)
+  const totalCount = cashCount + cardCount
   const totalExp = expenses.reduce((s, e) => s + (e.amount || 0), 0)
   const cashLeft = record.cash_left || 0
   const balance = cashLeft - totalExp
@@ -87,7 +89,13 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
                   <span style={{ color: 'var(--text-primary)' }}>現金 {d.cash_count || 0} 張　刷卡 {d.card_count || 0} 張</span>
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', paddingTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-secondary)', paddingTop: 8 }}>
+                <span>現金小計</span><span>{cashCount} 張</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-secondary)' }}>
+                <span>刷卡小計</span><span>{cardCount} 張</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', paddingTop: 4 }}>
                 <span>業績合計</span><span>{totalCount} 張</span>
               </div>
             </div>
@@ -220,7 +228,9 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
     setExpenses(prev => prev.filter(e => e.tempId !== tempId))
   }
 
-  const totalCount = days.reduce((s, d) => s + (parseInt(d.cash_count) || 0) + (parseInt(d.card_count) || 0), 0)
+  const cashCount = days.reduce((s, d) => s + (parseInt(d.cash_count) || 0), 0)
+  const cardCount = days.reduce((s, d) => s + (parseInt(d.card_count) || 0), 0)
+  const totalCount = cashCount + cardCount
   const totalExp = expenses.reduce((s, e) => s + (parseInt(e.amount) || 0), 0)
   const cashLeftNum = parseInt(cashLeft) || 0
   const balance = cashLeftNum - totalExp
@@ -410,6 +420,12 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
       {/* 即時總覽 */}
       <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, letterSpacing: 0.5 }}>總覽</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
+          <span>現金小計</span><span>{cashCount} 張</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
+          <span>刷卡小計</span><span>{cardCount} 張</span>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
           <span>業績合計</span><span>{totalCount} 張</span>
         </div>

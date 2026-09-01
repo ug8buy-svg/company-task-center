@@ -9,6 +9,14 @@ const DOT_COLOR = {
 }
 const DOT_ORDER = ['blue', 'orange', 'green']
 
+const EXHIBITION_COLORS = {
+  '旅遊展': { bg: 'rgba(239, 68, 68, 0.15)', text: 'var(--red)' },
+  '寵物展': { bg: 'rgba(234, 88, 12, 0.15)', text: 'var(--orange)' },
+}
+function exhibitionColor(category) {
+  return EXHIBITION_COLORS[category] || EXHIBITION_COLORS['旅遊展']
+}
+
 const WEEKDAYS    = ['日', '一', '二', '三', '四', '五', '六']
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 const DAY_NAMES   = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六']
@@ -54,7 +62,7 @@ async function fetchMonthEvents(yr, mo) {
     supabase.from('milestones').select('done_at')
       .eq('is_done', true).not('done_at', 'is', null)
       .gte('done_at', tsStart).lt('done_at', tsEnd),
-    supabase.from('exhibitions').select('event_date, end_date, name'),
+    supabase.from('exhibitions').select('event_date, end_date, name, category'),
     supabase.from('accounting_records').select('start_date, title')
       .eq('is_settled', false).gte('start_date', dateStart).lt('start_date', dateEnd),
   ])
@@ -104,7 +112,7 @@ async function fetchMonthEvents(yr, mo) {
       const exEnd = ex.end_date || ex.event_date
       return ex.event_date <= lastDayStr && exEnd >= dateStart
     })
-    .map(ex => ({ name: ex.name, startDate: ex.event_date, endDate: ex.end_date || ex.event_date }))
+    .map(ex => ({ name: ex.name, startDate: ex.event_date, endDate: ex.end_date || ex.event_date, category: ex.category || '旅遊展' }))
 
   return { dots, summ, exhibitionsList }
 }
@@ -201,7 +209,7 @@ function Calendar({ today }) {
               const isFirstInRow = isStart || colIndex === 0
               const daysLeftInEx = Math.round((new Date(ex.endDate) - new Date(key)) / 86400000)
               const labelWidthCells = isFirstInRow ? Math.min(daysLeftInEx, 6 - colIndex) + 1 : 0
-              return { name: ex.name, position, isFirstInRow, labelWidthCells }
+              return { name: ex.name, position, isFirstInRow, labelWidthCells, category: ex.category }
             }).filter(Boolean)
 
             return (
@@ -224,11 +232,12 @@ function Calendar({ today }) {
                 {dayExhibitions.map((ex, idx) => {
                   const isLeft  = ex.position === 'start' || ex.position === 'single'
                   const isRight = ex.position === 'end'   || ex.position === 'single'
+                  const color = exhibitionColor(ex.category)
                   return (
                     <div key={idx} style={{
                       height: 14, marginTop: 2,
                       alignSelf: 'stretch',
-                      background: 'rgba(239, 68, 68, 0.15)',
+                      background: color.bg,
                       borderTopLeftRadius:     isLeft  ? 4 : 0,
                       borderBottomLeftRadius:  isLeft  ? 4 : 0,
                       borderTopRightRadius:    isRight ? 4 : 0,
@@ -244,7 +253,7 @@ function Calendar({ today }) {
                           position: 'absolute', left: 0,
                           width: `${ex.labelWidthCells * 100}%`,
                           textAlign: 'center',
-                          fontSize: 9, color: 'var(--red)', lineHeight: '14px',
+                          fontSize: 9, color: color.text, lineHeight: '14px',
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           pointerEvents: 'none',
                         }}>{ex.name}</span>
