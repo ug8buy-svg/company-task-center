@@ -194,11 +194,57 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, defaultOpen }) {
   )
 }
 
+// ── 年份區塊 ──
+function YearSection({ year, exhibitions, assignments, onAdd, onDelete, isNewest, nearestId }) {
+  const [open, setOpen] = useState(isNewest)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', background: 'none', border: 'none',
+          padding: '8px 4px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{open ? '▾' : '▸'}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          {year}年（{exhibitions.length}場）
+        </span>
+      </button>
+      {open && (
+        <div style={{ paddingLeft: 4 }}>
+          {exhibitions.map(ex => (
+            <ExhibitionCard
+              key={ex.id}
+              ex={ex}
+              assignments={assignments.filter(a => a.exhibition_id === ex.id)}
+              onAdd={onAdd}
+              onDelete={onDelete}
+              defaultOpen={ex.id === nearestId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── 類型區塊（預設展開）──
 function CategorySection({ category, exhibitions, assignments, onAdd, onDelete }) {
   const [open, setOpen] = useState(true)
   // 每個類型各自展開最近那場（排序後第一筆）
   const nearestId = exhibitions.length > 0 ? exhibitions[0].id : null
+
+  // 依年份分組，由新到舊排列
+  const yearMap = {}
+  exhibitions.forEach(ex => {
+    const yr = ex.event_date.slice(0, 4)
+    if (!yearMap[yr]) yearMap[yr] = []
+    yearMap[yr].push(ex)
+  })
+  const years = Object.keys(yearMap).sort((a, b) => b - a)
+  const newestYear = years[0]
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -218,14 +264,16 @@ function CategorySection({ category, exhibitions, assignments, onAdd, onDelete }
 
       <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
         <div style={{ overflow: 'hidden' }}>
-          {exhibitions.map(ex => (
-            <ExhibitionCard
-              key={ex.id}
-              ex={ex}
-              assignments={assignments.filter(a => a.exhibition_id === ex.id)}
+          {years.map(yr => (
+            <YearSection
+              key={yr}
+              year={yr}
+              exhibitions={yearMap[yr]}
+              assignments={assignments}
               onAdd={onAdd}
               onDelete={onDelete}
-              defaultOpen={ex.id === nearestId}
+              isNewest={yr === newestYear}
+              nearestId={nearestId}
             />
           ))}
         </div>
