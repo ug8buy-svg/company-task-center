@@ -20,9 +20,47 @@ function addDays(dateStr, n) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
+// 手機拍照常常是好幾 MB 的原圖，先壓縮再上傳
+function compressImage(file, maxDim = 1600, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('讀取圖片失敗'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('圖片格式錯誤'))
+      img.onload = () => {
+        let { width, height } = img
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+          else { width = Math.round(width * maxDim / height); height = maxDim }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('圖片壓縮失敗')), 'image/jpeg', quality)
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+async function uploadFloorPlan(blob) {
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+  const { error } = await supabase.storage.from('accounting-photos').upload(path, blob, {
+    contentType: 'image/jpeg',
+    upsert: false,
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from('accounting-photos').getPublicUrl(path)
+  return data.publicUrl
+}
+
 // ── 帳務卡片 ──
 function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   const cashCount = daily.reduce((s, d) => s + (d.cash_count || 0), 0)
   const cardCount = daily.reduce((s, d) => s + (d.card_count || 0), 0)
@@ -52,7 +90,7 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{record.title}</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {fmtDate(record.start_date)} - {endDate}
+            {fmtDate(record.start_date)} - {endDate}{record.floor_plan_url ? ' 📍' : ''}
           </div>
         </div>
         <span style={{
@@ -79,6 +117,19 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
       <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
         <div style={{ overflow: 'hidden' }}>
           <div style={{ borderTop: '1px solid var(--border)', padding: '14px 16px 16px' }}>
+
+            {/* 位置圖 */}
+            {record.floor_plan_url && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, letterSpacing: 0.5 }}>位置圖</div>
+                <img
+                  src={record.floor_plan_url}
+                  alt="攤位位置圖"
+                  onClick={e => { e.stopPropagation(); setLightboxOpen(true) }}
+                  style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer' }}
+                />
+              </div>
+            )}
 
             {/* 業績 */}
             <div style={{ marginBottom: 16 }}>
@@ -165,6 +216,32 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
           </div>
         </div>
       </div>
+
+      {/* 位置圖全螢幕檢視 */}
+      {lightboxOpen && (
+        <div
+          onClick={() => setLightboxOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20, boxSizing: 'border-box',
+          }}
+        >
+          <img
+            src={record.floor_plan_url}
+            alt="攤位位置圖"
+            style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }}
+          />
+          <button
+            onClick={() => setLightboxOpen(false)}
+            style={{
+              position: 'fixed', top: 16, right: 16,
+              background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+              width: 36, height: 36, borderRadius: '50%', fontSize: 18, cursor: 'pointer', lineHeight: 1,
+            }}
+          >✕</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -204,6 +281,22 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
       : []
   )
   const [saving, setSaving] = useState(false)
+  const [floorPlanUrl, setFloorPlanUrl] = useState(initialRecord?.floor_plan_url ?? null)
+  const [floorPlanFile, setFloorPlanFile] = useState(null)
+  const [floorPlanPreview, setFloorPlanPreview] = useState(initialRecord?.floor_plan_url ?? null)
+
+  function handlePhotoSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFloorPlanFile(file)
+    setFloorPlanPreview(URL.createObjectURL(file))
+  }
+
+  function handlePhotoRemove() {
+    setFloorPlanFile(null)
+    setFloorPlanPreview(null)
+    setFloorPlanUrl(null)
+  }
 
   const year = startDate ? parseInt(startDate.split('-')[0]) : today.getFullYear()
 
@@ -240,11 +333,17 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
     if (!startDate) { alert('請選擇開始日期'); return }
     setSaving(true)
     try {
+      let finalFloorPlanUrl = floorPlanUrl
+      if (floorPlanFile) {
+        const blob = await compressImage(floorPlanFile)
+        finalFloorPlanUrl = await uploadFloorPlan(blob)
+      }
+
       if (isEdit) {
         // ── 編輯模式：UPDATE ──
         const { data: rec, error: recErr } = await supabase
           .from('accounting_records')
-          .update({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
+          .update({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum, floor_plan_url: finalFloorPlanUrl })
           .eq('id', initialRecord.id)
           .select().single()
         if (recErr) throw recErr
@@ -287,7 +386,7 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
         // ── 新增模式：INSERT ──
         const { data: rec, error: recErr } = await supabase
           .from('accounting_records')
-          .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
+          .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum, floor_plan_url: finalFloorPlanUrl })
           .select().single()
         if (recErr) throw recErr
 
@@ -358,6 +457,32 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
           <label style={lbl}>現金餘額（老闆留下的現金）</label>
           <input type="number" value={cashLeft} onChange={e => setCashLeft(e.target.value)} placeholder="0" style={inp}
             onFocus={e => e.target.style.borderColor = 'var(--blue)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+        </div>
+        <div>
+          <label style={lbl}>位置圖（選填）</label>
+          {floorPlanPreview ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src={floorPlanPreview} alt="位置圖預覽"
+                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, color: 'var(--blue)', cursor: 'pointer' }}>
+                  重新選擇
+                  <input type="file" accept="image/*" capture="environment" onChange={handlePhotoSelect} style={{ display: 'none' }} />
+                </label>
+                <button type="button" onClick={handlePhotoRemove}
+                  style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 13, cursor: 'pointer', padding: 0, textAlign: 'left' }}>移除</button>
+              </div>
+            </div>
+          ) : (
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              border: '1px dashed var(--border)', borderRadius: 8, padding: '8px 14px',
+              fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer',
+            }}>
+              📷 拍照 / 選擇圖片
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhotoSelect} style={{ display: 'none' }} />
+            </label>
+          )}
         </div>
       </div>
 
