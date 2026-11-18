@@ -69,13 +69,15 @@ const ROLE_STYLE = {
 }
 
 // ── 住宿安排 ──
-function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }) {
+function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onUpdate, onDelete }) {
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [hotelName, setHotelName] = useState('')
   const [contact, setContact] = useState('')
   const [price, setPrice] = useState('')
   const [selectedMembers, setSelectedMembers] = useState([])
   const [photoFile, setPhotoFile] = useState(null)
+  const [existingPhotoUrl, setExistingPhotoUrl] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
   const [saving, setSaving] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState(null)
@@ -92,20 +94,37 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
     setPhotoPreview(URL.createObjectURL(file))
   }
 
+  function resetForm() {
+    setHotelName(''); setContact(''); setPrice(''); setSelectedMembers([])
+    setPhotoFile(null); setExistingPhotoUrl(null); setPhotoPreview(null)
+    setShowForm(false); setEditingId(null)
+  }
+
+  function startEdit(b) {
+    setEditingId(b.id)
+    setHotelName(b.hotel_name)
+    setContact(b.contact || '')
+    setPrice(b.price ? String(b.price) : '')
+    setSelectedMembers(b.room_members || [])
+    setPhotoFile(null)
+    setExistingPhotoUrl(b.photo_url || null)
+    setPhotoPreview(b.photo_url || null)
+    setShowForm(true)
+  }
+
   async function handleSubmit() {
     if (!hotelName.trim()) return
     setSaving(true)
-    const ok = await onAdd(exhibitionId, {
+    const payload = {
       hotelName: hotelName.trim(),
       contact: contact.trim(),
       price: parseInt(price) || 0,
       roomMembers: selectedMembers,
       photoFile,
-    })
-    if (ok) {
-      setHotelName(''); setContact(''); setPrice(''); setSelectedMembers([])
-      setPhotoFile(null); setPhotoPreview(null); setShowForm(false)
+      existingPhotoUrl,
     }
+    const ok = editingId ? await onUpdate(editingId, payload) : await onAdd(exhibitionId, payload)
+    if (ok) resetForm()
     setSaving(false)
   }
 
@@ -152,6 +171,10 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
                 {fmtMoney(b.price)}
               </span>
               <button
+                onClick={() => startEdit(b)}
+                style={{ background: 'none', border: 'none', fontSize: 14, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}
+              >✏️</button>
+              <button
                 onClick={() => onDelete(b)}
                 style={{ background: 'none', border: 'none', fontSize: 15, color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}
               >🗑️</button>
@@ -162,6 +185,9 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
 
       {showForm ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {editingId && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--blue)' }}>編輯訂房記錄</div>
+          )}
           <input value={hotelName} onChange={e => setHotelName(e.target.value)} placeholder="飯店名稱" maxLength={100} style={inp}
             onFocus={e => e.target.style.borderColor = 'var(--blue)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
           <input value={contact} onChange={e => setContact(e.target.value)} placeholder="聯絡資訊（選填，電話/地址）" maxLength={100} style={inp}
@@ -191,7 +217,7 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
               <div style={{ position: 'relative', display: 'inline-block' }}>
                 <img src={photoPreview} alt="訂房截圖預覽"
                   style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
-                <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
+                <button type="button" onClick={() => { setPhotoFile(null); setExistingPhotoUrl(null); setPhotoPreview(null) }}
                   style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: 'var(--red)', color: '#fff', border: 'none', fontSize: 11, cursor: 'pointer', lineHeight: 1 }}
                 >✕</button>
               </div>
@@ -216,8 +242,8 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
                 cursor: saving || !hotelName.trim() ? 'not-allowed' : 'pointer',
                 opacity: saving || !hotelName.trim() ? 0.6 : 1,
               }}
-            >{saving ? '儲存中...' : '新增訂房'}</button>
-            <button onClick={() => setShowForm(false)}
+            >{saving ? '儲存中...' : editingId ? '更新訂房' : '新增訂房'}</button>
+            <button onClick={resetForm}
               style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 8, padding: '8px 14px', fontSize: 14, cursor: 'pointer' }}
             >取消</button>
           </div>
@@ -254,7 +280,7 @@ function HotelSection({ exhibitionId, bookings, memberOptions, onAdd, onDelete }
 }
 
 // ── 展覽卡片 ──
-function ExhibitionCard({ ex, assignments, onAdd, onDelete, bookings, onAddHotel, onDeleteHotel, defaultOpen }) {
+function ExhibitionCard({ ex, assignments, onAdd, onDelete, bookings, onAddHotel, onUpdateHotel, onDeleteHotel, defaultOpen }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
   const [name, setName]     = useState('')
   const [note, setNote]     = useState('')
@@ -418,6 +444,7 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, bookings, onAddHotel
               bookings={bookings}
               memberOptions={[...new Set(sortedAssignments.map(a => a.name))]}
               onAdd={onAddHotel}
+              onUpdate={onUpdateHotel}
               onDelete={onDeleteHotel}
             />
 
@@ -429,7 +456,7 @@ function ExhibitionCard({ ex, assignments, onAdd, onDelete, bookings, onAddHotel
 }
 
 // ── 年份區塊 ──
-function YearSection({ year, exhibitions, assignments, onAdd, onDelete, bookings, onAddHotel, onDeleteHotel, isNewest, nearestId }) {
+function YearSection({ year, exhibitions, assignments, onAdd, onDelete, bookings, onAddHotel, onUpdateHotel, onDeleteHotel, isNewest, nearestId }) {
   const [open, setOpen] = useState(isNewest)
   return (
     <div>
@@ -457,6 +484,7 @@ function YearSection({ year, exhibitions, assignments, onAdd, onDelete, bookings
               onDelete={onDelete}
               bookings={bookings.filter(b => b.exhibition_id === ex.id)}
               onAddHotel={onAddHotel}
+              onUpdateHotel={onUpdateHotel}
               onDeleteHotel={onDeleteHotel}
               defaultOpen={ex.id === nearestId}
             />
@@ -468,7 +496,7 @@ function YearSection({ year, exhibitions, assignments, onAdd, onDelete, bookings
 }
 
 // ── 類型區塊（預設展開）──
-function CategorySection({ category, exhibitions, assignments, onAdd, onDelete, bookings, onAddHotel, onDeleteHotel }) {
+function CategorySection({ category, exhibitions, assignments, onAdd, onDelete, bookings, onAddHotel, onUpdateHotel, onDeleteHotel }) {
   const [open, setOpen] = useState(true)
   // 每個類型各自展開最近那場（排序後第一筆）
   const nearestId = exhibitions.length > 0 ? exhibitions[0].id : null
@@ -511,6 +539,7 @@ function CategorySection({ category, exhibitions, assignments, onAdd, onDelete, 
               onDelete={onDelete}
               bookings={bookings}
               onAddHotel={onAddHotel}
+              onUpdateHotel={onUpdateHotel}
               onDeleteHotel={onDeleteHotel}
               isNewest={yr === newestYear}
               nearestId={nearestId}
@@ -562,13 +591,17 @@ export default function Staffing() {
     setAssignments(prev => prev.filter(a => a.id !== assignment.id))
   }
 
-  async function handleAddHotel(exhibitionId, { hotelName, contact, price, roomMembers, photoFile }) {
+  async function resolveHotelPhotoUrl({ photoFile, existingPhotoUrl }) {
+    if (photoFile) {
+      const blob = await compressImage(photoFile)
+      return await uploadHotelPhoto(blob)
+    }
+    return existingPhotoUrl || null
+  }
+
+  async function handleAddHotel(exhibitionId, { hotelName, contact, price, roomMembers, photoFile, existingPhotoUrl }) {
     try {
-      let photoUrl = null
-      if (photoFile) {
-        const blob = await compressImage(photoFile)
-        photoUrl = await uploadHotelPhoto(blob)
-      }
+      const photoUrl = await resolveHotelPhotoUrl({ photoFile, existingPhotoUrl })
       const { data, error } = await supabase
         .from('hotel_bookings')
         .insert({
@@ -583,6 +616,29 @@ export default function Staffing() {
         .select().single()
       if (error) throw error
       setBookings(prev => [...prev, data])
+      return true
+    } catch {
+      alert('操作失敗，請重試')
+      return false
+    }
+  }
+
+  async function handleUpdateHotel(bookingId, { hotelName, contact, price, roomMembers, photoFile, existingPhotoUrl }) {
+    try {
+      const photoUrl = await resolveHotelPhotoUrl({ photoFile, existingPhotoUrl })
+      const { data, error } = await supabase
+        .from('hotel_bookings')
+        .update({
+          hotel_name: hotelName,
+          contact: contact || null,
+          price,
+          room_members: roomMembers,
+          photo_url: photoUrl,
+        })
+        .eq('id', bookingId)
+        .select().single()
+      if (error) throw error
+      setBookings(prev => prev.map(b => b.id === bookingId ? data : b))
       return true
     } catch {
       alert('操作失敗，請重試')
@@ -683,6 +739,7 @@ export default function Staffing() {
               onDelete={handleDelete}
               bookings={bookings}
               onAddHotel={handleAddHotel}
+              onUpdateHotel={handleUpdateHotel}
               onDeleteHotel={handleDeleteHotel}
             />
           ) : null
