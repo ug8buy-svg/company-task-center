@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const CATEGORIES = ['主持薪水', '工讀薪水', '住宿', '雜項']
+const MAX_PHOTOS = 3
 
 function fmtMoney(n) {
   return '$' + Math.abs(n).toLocaleString()
@@ -46,7 +47,7 @@ function compressImage(file, maxDim = 1600, quality = 0.8) {
   })
 }
 
-async function uploadFloorPlan(blob) {
+async function uploadPhoto(blob) {
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
   const { error } = await supabase.storage.from('accounting-photos').upload(path, blob, {
     contentType: 'image/jpeg',
@@ -58,9 +59,10 @@ async function uploadFloorPlan(blob) {
 }
 
 // ── 帳務卡片 ──
-function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit }) {
+function AccountingCard({ record, daily, expenses, photos, onSettle, onDelete, onEdit }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(null)
+  const sortedPhotos = [...photos].sort((a, b) => a.sort_order - b.sort_order)
 
   const cashCount = daily.reduce((s, d) => s + (d.cash_count || 0), 0)
   const cardCount = daily.reduce((s, d) => s + (d.card_count || 0), 0)
@@ -90,7 +92,7 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{record.title}</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {fmtDate(record.start_date)} - {endDate}{record.floor_plan_url ? ' 📍' : ''}
+            {fmtDate(record.start_date)} - {endDate}{sortedPhotos.length > 0 ? ' 📍' : ''}
           </div>
         </div>
         <span style={{
@@ -119,15 +121,20 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
           <div style={{ borderTop: '1px solid var(--border)', padding: '14px 16px 16px' }}>
 
             {/* 位置圖 */}
-            {record.floor_plan_url && (
+            {sortedPhotos.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, letterSpacing: 0.5 }}>位置圖</div>
-                <img
-                  src={record.floor_plan_url}
-                  alt="攤位位置圖"
-                  onClick={e => { e.stopPropagation(); setLightboxOpen(true) }}
-                  style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer' }}
-                />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {sortedPhotos.map((p, i) => (
+                    <img
+                      key={p.id}
+                      src={p.url}
+                      alt="攤位位置圖"
+                      onClick={e => { e.stopPropagation(); setLightboxIndex(i) }}
+                      style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer' }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -218,9 +225,9 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
       </div>
 
       {/* 位置圖全螢幕檢視 */}
-      {lightboxOpen && (
+      {lightboxIndex !== null && (
         <div
-          onClick={() => setLightboxOpen(false)}
+          onClick={() => setLightboxIndex(null)}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -228,12 +235,36 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
           }}
         >
           <img
-            src={record.floor_plan_url}
+            src={sortedPhotos[lightboxIndex].url}
             alt="攤位位置圖"
             style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }}
           />
+          {sortedPhotos.length > 1 && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setLightboxIndex(i => (i - 1 + sortedPhotos.length) % sortedPhotos.length) }}
+                style={{
+                  position: 'fixed', left: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+                  width: 40, height: 40, borderRadius: '50%', fontSize: 20, cursor: 'pointer', lineHeight: 1,
+                }}
+              >‹</button>
+              <button
+                onClick={e => { e.stopPropagation(); setLightboxIndex(i => (i + 1) % sortedPhotos.length) }}
+                style={{
+                  position: 'fixed', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+                  width: 40, height: 40, borderRadius: '50%', fontSize: 20, cursor: 'pointer', lineHeight: 1,
+                }}
+              >›</button>
+              <div style={{
+                position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+                color: '#fff', fontSize: 13, background: 'rgba(0,0,0,0.4)', borderRadius: 12, padding: '3px 10px',
+              }}>{lightboxIndex + 1} / {sortedPhotos.length}</div>
+            </>
+          )}
           <button
-            onClick={() => setLightboxOpen(false)}
+            onClick={() => setLightboxIndex(null)}
             style={{
               position: 'fixed', top: 16, right: 16,
               background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
@@ -247,7 +278,7 @@ function AccountingCard({ record, daily, expenses, onSettle, onDelete, onEdit })
 }
 
 // ── 新增 / 編輯表單 ──
-function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initialExpenses }) {
+function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initialExpenses, initialPhotos }) {
   const isEdit = !!initialRecord
   const today = new Date()
 
@@ -281,21 +312,24 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
       : []
   )
   const [saving, setSaving] = useState(false)
-  const [floorPlanUrl, setFloorPlanUrl] = useState(initialRecord?.floor_plan_url ?? null)
-  const [floorPlanFile, setFloorPlanFile] = useState(null)
-  const [floorPlanPreview, setFloorPlanPreview] = useState(initialRecord?.floor_plan_url ?? null)
+  const [photos, setPhotos] = useState(() =>
+    isEdit
+      ? [...(initialPhotos ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(p => ({ tempId: p.id, existingUrl: p.url, file: null }))
+      : []
+  )
 
-  function handlePhotoSelect(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setFloorPlanFile(file)
-    setFloorPlanPreview(URL.createObjectURL(file))
+  function handleAddPhotos(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    setPhotos(prev => {
+      const room = MAX_PHOTOS - prev.length
+      return [...prev, ...files.slice(0, room).map(file => ({ tempId: Date.now() + Math.random(), existingUrl: null, file }))]
+    })
   }
 
-  function handlePhotoRemove() {
-    setFloorPlanFile(null)
-    setFloorPlanPreview(null)
-    setFloorPlanUrl(null)
+  function removePhoto(tempId) {
+    setPhotos(prev => prev.filter(p => p.tempId !== tempId))
   }
 
   const year = startDate ? parseInt(startDate.split('-')[0]) : today.getFullYear()
@@ -333,17 +367,19 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
     if (!startDate) { alert('請選擇開始日期'); return }
     setSaving(true)
     try {
-      let finalFloorPlanUrl = floorPlanUrl
-      if (floorPlanFile) {
-        const blob = await compressImage(floorPlanFile)
-        finalFloorPlanUrl = await uploadFloorPlan(blob)
-      }
+      // 上傳所有新選的位置圖（已存在的沿用原本網址，不重複上傳）
+      const finalPhotos = await Promise.all(
+        photos.map(async (p, i) => ({
+          url: p.existingUrl || await uploadPhoto(await compressImage(p.file)),
+          sort_order: i,
+        }))
+      )
 
       if (isEdit) {
         // ── 編輯模式：UPDATE ──
         const { data: rec, error: recErr } = await supabase
           .from('accounting_records')
-          .update({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum, floor_plan_url: finalFloorPlanUrl })
+          .update({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
           .eq('id', initialRecord.id)
           .select().single()
         if (recErr) throw recErr
@@ -381,12 +417,23 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
           if (expErr) throw expErr
           expData = data || []
         }
-        onSave(rec, dailyData, expData)
+
+        // 位置圖：刪除舊的，重新寫入
+        await supabase.from('accounting_photos').delete().eq('record_id', initialRecord.id)
+        let photoData = []
+        if (finalPhotos.length > 0) {
+          const { data, error: photoErr } = await supabase.from('accounting_photos')
+            .insert(finalPhotos.map(p => ({ record_id: initialRecord.id, url: p.url, sort_order: p.sort_order })))
+            .select()
+          if (photoErr) throw photoErr
+          photoData = data || []
+        }
+        onSave(rec, dailyData, expData, photoData)
       } else {
         // ── 新增模式：INSERT ──
         const { data: rec, error: recErr } = await supabase
           .from('accounting_records')
-          .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum, floor_plan_url: finalFloorPlanUrl })
+          .insert({ year, title: title.trim(), start_date: startDate, cash_left: cashLeftNum })
           .select().single()
         if (recErr) throw recErr
 
@@ -415,7 +462,16 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
           if (expErr) throw expErr
           expData = data || []
         }
-        onSave(rec, dailyData || [], expData)
+
+        let photoData = []
+        if (finalPhotos.length > 0) {
+          const { data, error: photoErr } = await supabase.from('accounting_photos')
+            .insert(finalPhotos.map(p => ({ record_id: rec.id, url: p.url, sort_order: p.sort_order })))
+            .select()
+          if (photoErr) throw photoErr
+          photoData = data || []
+        }
+        onSave(rec, dailyData || [], expData, photoData)
       }
     } catch {
       alert('儲存失敗，請重試')
@@ -459,30 +515,30 @@ function AccountingForm({ onSave, onCancel, initialRecord, initialDaily, initial
             onFocus={e => e.target.style.borderColor = 'var(--blue)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
         </div>
         <div>
-          <label style={lbl}>位置圖（選填）</label>
-          {floorPlanPreview ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img src={floorPlanPreview} alt="位置圖預覽"
-                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 13, color: 'var(--blue)', cursor: 'pointer' }}>
-                  重新選擇
-                  <input type="file" accept="image/*" capture="environment" onChange={handlePhotoSelect} style={{ display: 'none' }} />
-                </label>
-                <button type="button" onClick={handlePhotoRemove}
-                  style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 13, cursor: 'pointer', padding: 0, textAlign: 'left' }}>移除</button>
+          <label style={lbl}>位置圖（選填，最多 {MAX_PHOTOS} 張）</label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {photos.map(p => (
+              <div key={p.tempId} style={{ position: 'relative' }}>
+                <img src={p.existingUrl || URL.createObjectURL(p.file)} alt="位置圖預覽"
+                  style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                <button type="button" onClick={() => removePhoto(p.tempId)}
+                  style={{
+                    position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
+                    background: 'var(--red)', color: '#fff', border: 'none', fontSize: 12, cursor: 'pointer', lineHeight: 1,
+                  }}>✕</button>
               </div>
-            </div>
-          ) : (
-            <label style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              border: '1px dashed var(--border)', borderRadius: 8, padding: '8px 14px',
-              fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer',
-            }}>
-              📷 拍照 / 選擇圖片
-              <input type="file" accept="image/*" capture="environment" onChange={handlePhotoSelect} style={{ display: 'none' }} />
-            </label>
-          )}
+            ))}
+            {photos.length < MAX_PHOTOS && (
+              <label style={{
+                width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px dashed var(--border)', borderRadius: 8, fontSize: 22,
+                color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0,
+              }}>
+                ＋
+                <input type="file" accept="image/*" multiple onChange={handleAddPhotos} style={{ display: 'none' }} />
+              </label>
+            )}
+          </div>
         </div>
       </div>
 
@@ -586,6 +642,7 @@ export default function Accounting() {
   const [records, setRecords] = useState([])
   const [daily, setDaily] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -595,15 +652,17 @@ export default function Accounting() {
 
   async function init() {
     setLoading(true)
-    const [{ data: rData }, { data: dData }, { data: eData }] = await Promise.all([
+    const [{ data: rData }, { data: dData }, { data: eData }, { data: pData }] = await Promise.all([
       supabase.from('accounting_records').select('*').order('start_date', { ascending: false }),
       supabase.from('accounting_daily').select('*').order('day_index'),
       supabase.from('accounting_expenses').select('*').order('sort_order'),
+      supabase.from('accounting_photos').select('*').order('sort_order'),
     ])
     const recs = rData ?? []
     setRecords(recs)
     setDaily(dData ?? [])
     setExpenses(eData ?? [])
+    setPhotos(pData ?? [])
     const currentYear = new Date().getFullYear()
     const years = [...new Set(recs.map(r => r.year))]
     setExpandedYears(new Set(years.includes(currentYear) ? [currentYear] : years.slice(0, 1)))
@@ -639,26 +698,29 @@ export default function Accounting() {
     setRecords(prev => prev.filter(r => r.id !== record.id))
     setDaily(prev => prev.filter(d => d.record_id !== record.id))
     setExpenses(prev => prev.filter(e => e.record_id !== record.id))
+    setPhotos(prev => prev.filter(p => p.record_id !== record.id))
   }
 
-  function handleSave(rec, newDaily, newExpenses) {
+  function handleSave(rec, newDaily, newExpenses, newPhotos) {
     setRecords(prev => {
       const updated = [rec, ...prev]
       return updated.sort((a, b) => b.start_date.localeCompare(a.start_date))
     })
     setDaily(prev => [...prev, ...newDaily])
     setExpenses(prev => [...prev, ...newExpenses])
+    setPhotos(prev => [...prev, ...(newPhotos || [])])
     setExpandedYears(prev => new Set([...prev, rec.year]))
     setShowForm(false)
   }
 
-  function handleEditSave(rec, newDaily, newExpenses) {
+  function handleEditSave(rec, newDaily, newExpenses, newPhotos) {
     setRecords(prev =>
       prev.map(r => r.id === rec.id ? rec : r)
         .sort((a, b) => b.start_date.localeCompare(a.start_date))
     )
     setDaily(prev => [...prev.filter(d => d.record_id !== rec.id), ...newDaily])
     setExpenses(prev => [...prev.filter(e => e.record_id !== rec.id), ...newExpenses])
+    setPhotos(prev => [...prev.filter(p => p.record_id !== rec.id), ...(newPhotos || [])])
     setEditingId(null)
   }
 
@@ -716,6 +778,7 @@ export default function Accounting() {
                           initialRecord={record}
                           initialDaily={daily.filter(d => d.record_id === record.id)}
                           initialExpenses={expenses.filter(e => e.record_id === record.id)}
+                          initialPhotos={photos.filter(p => p.record_id === record.id)}
                           onSave={handleEditSave}
                           onCancel={() => setEditingId(null)}
                         />
@@ -725,6 +788,7 @@ export default function Accounting() {
                           record={record}
                           daily={daily.filter(d => d.record_id === record.id)}
                           expenses={expenses.filter(e => e.record_id === record.id)}
+                          photos={photos.filter(p => p.record_id === record.id)}
                           onSettle={handleSettle}
                           onDelete={handleDelete}
                           onEdit={() => setEditingId(record.id)}
